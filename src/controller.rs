@@ -148,22 +148,6 @@ async fn get_associated_pod(
         .context(format!("No pod found matching selector {}", label_selector))
 }
 
-fn get_pod_image_digest(pod: &Pod) -> anyhow::Result<String> {
-    let image_id = pod
-        .status
-        .as_ref()
-        .and_then(|s| s.container_statuses.as_ref())
-        .and_then(|cs| cs.first())
-        .map(|cs| cs.image_id.clone())
-        .context(format!(
-            "No image digest found for pod {:?}",
-            pod.metadata.name
-        ))?;
-
-    let image_id_parts: Vec<&str> = image_id.split("@").collect();
-    Ok(image_id_parts[1].to_string())
-}
-
 fn get_pod_container_image_references(pod: &Pod) -> anyhow::Result<Vec<ContainerImageReference>> {
     let container_statuses = pod
         .status

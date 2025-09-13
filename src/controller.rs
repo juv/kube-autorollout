@@ -82,7 +82,7 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
                 let updated_digest =
                     fetch_digest_from_tag(&reference.image_reference, ctx.registry_token.as_ref())
                         .await
-                        .context("Failed to retrieve updated digest from registy")?;
+                        .context("Failed to retrieve updated digest from registry")?;
 
                 if (reference.digest.ne(&updated_digest)) {
                     //execute deployment patch

@@ -1,10 +1,13 @@
-use crate::controller::Context;
+use crate::controller::ControllerContext;
+use anyhow::Context;
 use std::env;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::info;
 use tracing_subscriber;
 
 mod controller;
+mod image_reference;
+mod oci_registry;
 mod webserver;
 
 #[tokio::main]
@@ -14,11 +17,13 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Initializing K8s controller");
     let client = controller::create_client().await?;
-    let ctx = Context {
+    let token = env::var("REGISTRY_TOKEN").context("REGISTRY_TOKEN is not set")?;
+    let ctx = ControllerContext {
         client: client.clone(),
+        registry_token: token.clone(),
     };
 
-    let cron_schedule = env::var("CRON_SCHEDULE").unwrap_or_else(|_| "*/5 * * * * *".to_string());
+    let cron_schedule = env::var("CRON_SCHEDULE").unwrap_or_else(|_| "*/15 * * * * *".to_string());
     info!("Executing job scheduler at cron schedule {}", cron_schedule);
     let scheduler = JobScheduler::new().await?;
 
@@ -26,7 +31,6 @@ async fn main() -> anyhow::Result<()> {
     let job = Job::new_async(cron_schedule, move |_uuid, _l| {
         let ctx = ctx.clone();
         Box::pin(async move {
-            info!("Cron job running every 5 seconds");
             if let Err(e) = controller::run(ctx).await {
                 tracing::error!("Error running controller job: {:?}", e);
             }

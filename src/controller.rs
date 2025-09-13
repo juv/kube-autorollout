@@ -1,17 +1,32 @@
+use crate::image_reference;
+use crate::image_reference::ImageReference;
+use crate::oci_registry::fetch_digest_from_tag;
+use anyhow::{anyhow, Context};
 use chrono::Utc;
 use k8s_openapi::api::apps::v1::Deployment;
+use k8s_openapi::api::core::v1::{ContainerStatus, Pod};
+use k8s_openapi::merge_strategies::list::map;
 use kube::api::{ListParams, Patch, PatchParams};
 use kube::{Api, Client};
 use serde_json::json;
-use tracing::info;
+use std::collections::BTreeMap;
+use tracing::{debug, info};
 
 static KUBE_AUTOROLLOUT_LABEL: &str = "kube-autorollout/enabled=true";
+static KUBE_AUTOROLLOUT_ANNOTATION: &str = "kube-autorollout/restartedAt";
 static KUBE_AUTOROLLOUT_FIELD_MANAGER: &str = "kube-autorollout";
 
 #[derive(Clone)]
-pub struct Context {
+pub struct ControllerContext {
     /// Kubernetes client
     pub client: Client,
+    pub(crate) registry_token: String,
+}
+
+struct ContainerImageReference {
+    container_name: String,
+    image_reference: ImageReference,
+    digest: String,
 }
 
 pub async fn create_client() -> anyhow::Result<Client> {
@@ -26,8 +41,9 @@ pub async fn create_client() -> anyhow::Result<Client> {
     Ok(client)
 }
 
-pub async fn run(ctx: Context) -> anyhow::Result<()> {
-    let deployments: Api<Deployment> = Api::default_namespaced(ctx.client);
+pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
+    let deployments: Api<Deployment> = Api::default_namespaced(ctx.client.clone());
+    let pods: Api<Pod> = Api::default_namespaced(ctx.client.clone());
     let lp = ListParams::default().labels(KUBE_AUTOROLLOUT_LABEL);
 
     // List the deployments based on label selector (server-side filtering)
@@ -42,7 +58,141 @@ pub async fn run(ctx: Context) -> anyhow::Result<()> {
     for deployment in deployment_list.items {
         let name = deployment.metadata.name.unwrap();
         info!("Found deployment with label: {}", name);
+        let status = deployment.status.unwrap();
+        let spec = deployment.spec.unwrap();
+        let desired_replicas = spec.replicas.unwrap();
+        let actual_replicas = status.replicas.unwrap_or(0);
+        if desired_replicas > 0 && actual_replicas > 0 {
+            let selector = spec.selector.match_labels.clone().unwrap();
+            let pod = get_associated_pod(&pods, &selector).await?;
+            let pod_name = pod.metadata.name.as_ref().unwrap();
+
+            let container_image_references = get_pod_container_image_references(&pod);
+
+            for reference in container_image_references?.iter() {
+                let pod_string = format!(
+                    "pod {} container {} with image {}",
+                    pod_name, reference.container_name, reference.image_reference
+                );
+                info!(
+                    "Found {} and current digest {}",
+                    pod_string, reference.digest
+                );
+
+                let updated_digest =
+                    fetch_digest_from_tag(&reference.image_reference, ctx.registry_token.as_ref())
+                        .await
+                        .context("Failed to retrieve updated digest from registy")?;
+
+                if (reference.digest.ne(&updated_digest)) {
+                    //execute deployment patch
+                } else {
+                    info!("Skipping {}, digest is up to date", pod_string);
+                }
+            }
+        } else {
+            info!(
+                "Skipping deployment {} as desired replicas are {} and actual replicas are {}",
+                name, desired_replicas, actual_replicas
+            );
+        }
     }
 
     Ok(())
+}
+
+async fn patch_deployment(deployments: &Api<Deployment>, name: &str) -> anyhow::Result<()> {
+    let patch = json!({
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        KUBE_AUTOROLLOUT_ANNOTATION: Utc::now().to_rfc3339(),
+                    }
+                }
+            }
+        }
+    });
+
+    debug!("Patching deployment {} with patch {}", name, patch);
+
+    deployments
+        .patch(
+            name,
+            &PatchParams::apply(KUBE_AUTOROLLOUT_FIELD_MANAGER),
+            &Patch::Merge(&patch),
+        )
+        .await?;
+    Ok(())
+}
+
+async fn get_associated_pod(
+    pods: &Api<Pod>,
+    selector: &BTreeMap<String, String>,
+) -> anyhow::Result<Pod> {
+    // Build a label selector string like "key1=value1,key2=value2"
+    let label_selector = selector
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    // List pods with the label selector
+    let lp = ListParams::default().labels(&label_selector);
+    let pod_list = pods.list(&lp).await?;
+
+    pod_list
+        .items
+        .into_iter()
+        .next()
+        .context(format!("No pod found matching selector {}", label_selector))
+}
+
+fn get_pod_image_digest(pod: &Pod) -> anyhow::Result<String> {
+    let image_id = pod
+        .status
+        .as_ref()
+        .and_then(|s| s.container_statuses.as_ref())
+        .and_then(|cs| cs.first())
+        .map(|cs| cs.image_id.clone())
+        .context(format!(
+            "No image digest found for pod {:?}",
+            pod.metadata.name
+        ))?;
+
+    let image_id_parts: Vec<&str> = image_id.split("@").collect();
+    Ok(image_id_parts[1].to_string())
+}
+
+fn get_pod_container_image_references(pod: &Pod) -> anyhow::Result<Vec<ContainerImageReference>> {
+    let container_statuses = pod
+        .status
+        .as_ref()
+        .and_then(|s| s.container_statuses.as_ref())
+        .context("Failed to get container status")?;
+
+    let references: Result<Vec<_>, _> = container_statuses
+        .iter()
+        .map(|container_status| get_container_image_reference(container_status))
+        .collect();
+
+    Ok(references?)
+}
+
+fn get_container_image_reference(
+    container_status: &ContainerStatus,
+) -> anyhow::Result<ContainerImageReference> {
+    let container_name = container_status.name.clone();
+    let image = container_status.image.clone();
+    let image_id = container_status.image_id.clone();
+
+    let image_reference: ImageReference =
+        ImageReference::parse(&image).context("Failed to parse image reference")?;
+    let digest = image_id.split("@").collect::<Vec<&str>>()[1].to_string();
+
+    Ok(ContainerImageReference {
+        container_name,
+        image_reference,
+        digest,
+    })
 }

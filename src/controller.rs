@@ -56,8 +56,8 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
     );
 
     for deployment in deployment_list.items {
-        let name = deployment.metadata.name.unwrap();
-        info!("Found deployment with label: {}", name);
+        let deployment_name = deployment.metadata.name.unwrap();
+        info!("Found deployment with label: {}", deployment_name);
         let status = deployment.status.unwrap();
         let spec = deployment.spec.unwrap();
         let desired_replicas = spec.replicas.unwrap();
@@ -84,8 +84,17 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
                         .await
                         .context("Failed to retrieve updated digest from registry")?;
 
-                if (reference.digest.ne(&updated_digest)) {
-                    //execute deployment patch
+                if reference.digest.ne(&updated_digest) {
+                    patch_deployment(&deployments, &deployment_name)
+                        .await
+                        .context(format!(
+                            "Failed to patch deployment {} to trigger rollout",
+                            deployment_name
+                        ))?;
+                    info!(
+                        "Successfully triggered rollout for deployment {}",
+                        deployment_name
+                    )
                 } else {
                     info!("Skipping {}, digest is up to date", pod_string);
                 }
@@ -93,7 +102,7 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
         } else {
             info!(
                 "Skipping deployment {} as desired replicas are {} and actual replicas are {}",
-                name, desired_replicas, actual_replicas
+                deployment_name, desired_replicas, actual_replicas
             );
         }
     }
@@ -101,7 +110,7 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn patch_deployment(deployments: &Api<Deployment>, name: &str) -> anyhow::Result<()> {
+async fn patch_deployment(deployments: &Api<Deployment>, name: &String) -> anyhow::Result<()> {
     let patch = json!({
         "spec": {
             "template": {

@@ -18,9 +18,14 @@ async fn main() -> anyhow::Result<()> {
     info!("Initializing K8s controller");
     let client = controller::create_client().await?;
     let token = env::var("REGISTRY_TOKEN").context("REGISTRY_TOKEN is not set")?;
+    let enable_jfrog_artifactory_fallback = env::var("ENABLE_JFROG_ARTIFACTORY_FALLBACK")
+        .context("ENABLE_JFROG_ARTIFACTORY_FALLBACK is not set")?
+        .parse::<bool>()
+        .context("ENABLE_JFROG_ARTIFACTORY_FALLBACK can not be parsed to boolean")?;
     let ctx = ControllerContext {
         client: client.clone(),
         registry_token: token.clone(),
+        enable_jfrog_artifactory_fallback,
     };
 
     let cron_schedule = env::var("CRON_SCHEDULE").unwrap_or_else(|_| "*/15 * * * * *".to_string());

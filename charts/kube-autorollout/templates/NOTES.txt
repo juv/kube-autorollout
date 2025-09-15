@@ -1,4 +1,4 @@
-kube-autorollout has been installed! 🚀
+kube-autorollout {{ .Chart.Version }} has been installed! 🚀
 
 ### Deployment details
 Your release has been deployed into the "{{ .Release.Namespace }}" namespace.

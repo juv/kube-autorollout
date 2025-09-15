@@ -103,7 +103,7 @@ jobs:
             }
             let body = release.data.body;
             
-            const versionsResponse = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+            const versionsResponse = await github.rest.packages.getAllPackageVersionsForPackageForUser({
               package_type: 'container',
               package_name: repo,
               org: owner,

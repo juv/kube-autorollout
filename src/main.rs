@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
     scheduler.start().await?;
 
     let app = webserver::create_app();
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
     info!("Starting webserver on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

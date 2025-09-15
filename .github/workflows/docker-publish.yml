@@ -106,7 +106,7 @@ jobs:
             const versionsResponse = await github.rest.packages.getAllPackageVersionsForPackageOwnedByUser({
               package_type: 'container',
               package_name: repo,
-              org: owner,
+              username: owner,
             });
   
             // Find the version matching the release tag

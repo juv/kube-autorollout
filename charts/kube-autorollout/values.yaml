@@ -1,6 +1,6 @@
 # Default values for kube-autorollout.
 
-# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+# -- The number of application controller pods to run. A number higher than one does not make sense at this time as the controller is not supporting sharding.
 replicaCount: 1
 
 # -- kube-autorollout controller configuration
@@ -17,12 +17,13 @@ config:
   # -- Enable JFrog Artifactory fallback when the Artifactory is configured to use the Repository Path Method (https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
   enableJfrogArtifactoryFallback: false
 
-# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+#-- Sets the kube-autorollout container image. More information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
+  # -- The image repository name to use for the container image
   repository: ghcr.io/juv/kube-autorollout
-  # This sets the pull policy for images.
+  # -- Image pull policy for the container image
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
+  # -- Image tag to use for the container image. Overrides the image tag whose default is the chart appVersion.
   tag: "v0.1.0"
 
 # -- Kubernetes RBAC configuration
@@ -30,34 +31,34 @@ rbac:
   # -- Switch to enable/disable the creation of Kubernetes role and rolebinding for the kube-autorollout service account automatically. If false, the role and rolebinding that targets the service account must be created separately.
   enabled: true
 
-# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+# -- Secrets with credentials to pull images from a private registry. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
-# This is to override the chart name.
+# -- Override to the chart name
 nameOverride: ""
+# -- String to fully override `"kube-autorollout.fullname"`
 fullnameOverride: ""
 
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:
-  # Specifies whether a service account should be created
+  # -- Specifies whether a service account should be created
   create: true
-  # Automatically mount a ServiceAccount's API credentials?
+  # -- Automatically mount a ServiceAccount's API credentials?
   automount: true
-  # Annotations to add to the service account
+  # -- Annotations to add to the service account
   annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
+  # -- The name of the service account to use. If not set and create is true, a name is generated using the fullname template
   name: ""
 
-# This is for setting Kubernetes Annotations to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+# -- Pod annotations for kube-autorollout. More information can be found here: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 podAnnotations: {}
-# This is for setting Kubernetes Labels to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+# -- Pod labels for kube-autorollout. More information can be found here: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
 
+# -- kube-autorollout pod-level security context. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
 podSecurityContext: {}
   # fsGroup: 2000
 
+# -- kube-autorollout container-level security context. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
 securityContext: {}
   # capabilities:
   #   drop:
@@ -66,30 +67,35 @@ securityContext: {}
   # runAsNonRoot: true
   # runAsUser: 1000
 
+# --  Resource requests and limits for the kube-autorollout pod
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
   # requests:
   #   cpu: 100m
   #   memory: 128Mi
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
 
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+# -- Liveness probe for the kube-autorollout controller. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   httpGet:
     path: /health/live
     port: http
+# -- Readiness probe for kube-autorollout controller. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 readinessProbe:
   httpGet:
     path: /health/ready
     port: http
 
+# -- Node selector for the kube-autorollout controller. More information can be found here: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
 nodeSelector: {}
 
+# -- Tolerations for the kube-autorollout controller. More information can be found here: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
 tolerations: []
 
+# -- Affinity configuration for the kube-autorollout controller. More information can be found here: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
 affinity: {}

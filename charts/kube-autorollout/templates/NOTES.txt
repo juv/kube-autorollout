@@ -1,0 +1,24 @@
+kube-autorollout has been installed! 🚀
+
+### Deployment details
+Your release has been deployed into the "{{ .Release.Namespace }}" namespace.
+
+To check the status of the deployment, run:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name=kube-autorollout
+
+To view the logs of kube-autorollout:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name=kube-autorollout
+
+### Good to know
+- kube-autorollout runs as a controller and continuously watches your cluster
+  for deployments/statefulsets/daemonsets configured for automated rollouts.
+- kube-autorollout scans within the namespace it was deployed in;
+  deploy this application in multiple names in case you want to automate rollouts in multiple namespaces
+- No ingress is exposed, since this service runs internally within the cluster.
+
+### Verifying rollouts
+You can check that rollouts are being triggered by inspecting the events stream:
+  kubectl get events -n {{ .Release.Namespace }} --sort-by='.lastTimestamp'
+
+Or by describing a deployment you expect to be updated:
+  kubectl describe deployment <your-deployment> -n <your-namespace>

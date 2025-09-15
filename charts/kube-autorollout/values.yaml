@@ -12,7 +12,7 @@ config:
     secret:
       # -- Kubernetes Secret name to reference that contains the Docker Registry API token
       name: kube-autorollout-docker-registry-api-token
-      # -- The key to reference the registry api token from
+      # -- The key to reference in the secret
       key: REGISTRY_TOKEN
   # -- Enable JFrog Artifactory fallback when the Artifactory is configured to use the Repository Path Method (https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
   enableJfrogArtifactoryFallback: false

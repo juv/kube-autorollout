@@ -1,0 +1,16 @@
+{{- if .Values.rbac.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kube-autorollout.fullname" . }}-rolebinding
+  labels:
+    {{- include "kube-autorollout.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kube-autorollout.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "kube-autorollout.fullname" . }}-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

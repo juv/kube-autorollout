@@ -1,4 +1,4 @@
-kube-autorollout {{ .Chart.Version }} has been installed! 🚀
+Release "{{ .Release.Name }}" of kube-autorollout {{ .Chart.Version }} has been {{ ternary "installed" "upgraded" .Release.IsInstall }}! 🚀
 
 ### Deployment details
 Your release has been deployed into the "{{ .Release.Namespace }}" namespace.

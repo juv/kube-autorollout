@@ -121,7 +121,7 @@ jobs:
             const versionId = matchingVersion.id;
             const packageUrl = "https://github.com/${owner}/${repo}/pkgs/container/${repo}/${versionId}?tag=${tag}"
             const ghcrImageName = `ghcr.io/${owner}/{repo}:${tag}`;
-            const imageInfo = `\n\n## Images: Docker Image: \`${ghcrImageName}\`\nGitHub Packages: [ghcr.io/${owner}/{repo}](${packageUrl})`;
+            const imageInfo = `\n\n## Images:\nDocker Image: \`${ghcrImageName}\`\nGitHub Packages: [ghcr.io/${owner}/{repo}](${packageUrl})`;
             
             if (!body.includes(imageInfo)) {
               body += imageInfo;

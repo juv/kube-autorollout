@@ -22,6 +22,10 @@ async fn main() -> anyhow::Result<()> {
         .context("ENABLE_JFROG_ARTIFACTORY_FALLBACK is not set")?
         .parse::<bool>()
         .context("ENABLE_JFROG_ARTIFACTORY_FALLBACK can not be parsed to boolean")?;
+    let port = env::var("WEBSERVER_PORT")
+        .context("WEBSERVER_PORT is not set")?
+        .parse::<u16>()
+        .context("WEBSERVER_PORT can not be parsed to uint16")?;
     let ctx = ControllerContext {
         client: client.clone(),
         registry_token: token.clone(),
@@ -45,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
     scheduler.start().await?;
 
     let app = webserver::create_app();
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 8080));
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     info!("Starting webserver on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

@@ -78,3 +78,84 @@ impl ImageReference {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_valid_image_reference() {
+        let input = "myregistry.example.com/myrepo/myimage:v1.0.0";
+        let result = ImageReference::parse(input);
+        assert!(result.is_ok());
+        let image_ref = result.unwrap();
+        assert_eq!(image_ref.registry, "myregistry.example.com");
+        assert_eq!(image_ref.repository, "myrepo/myimage");
+        assert_eq!(image_ref.tag, "v1.0.0");
+        // Check Display implementation
+        assert_eq!(image_ref.to_string(), input);
+    }
+
+    #[test]
+    fn parse_valid_image_reference_single_level_repo() {
+        let input = "registry/repo:latest";
+        let result = ImageReference::parse(input).unwrap();
+        assert_eq!(result.registry, "registry");
+        assert_eq!(result.repository, "repo");
+        assert_eq!(result.tag, "latest");
+        assert_eq!(result.to_string(), input);
+    }
+
+    #[test]
+    fn parse_error_digest_not_allowed() {
+        let input = "registry/repo@sha256:123abc";
+        let err = ImageReference::parse(input).unwrap_err();
+        match err {
+            ParseError::DigestNotAllowed => {}
+            _ => panic!("Expected DigestNotAllowed error"),
+        }
+    }
+
+    #[test]
+    fn parse_error_missing_tag() {
+        let input = "registry/repo";
+        let err = ImageReference::parse(input).unwrap_err();
+        match err {
+            ParseError::MissingTag => {}
+            _ => panic!("Expected MissingTag error"),
+        }
+    }
+
+    #[test]
+    fn parse_error_invalid_format() {
+        // No slash after registry means invalid format
+        let input = "registryrepo:tag";
+        let err = ImageReference::parse(input).unwrap_err();
+        match err {
+            ParseError::InvalidFormat(s) => assert_eq!(s, input),
+            _ => panic!("Expected InvalidFormat error"),
+        }
+    }
+
+    #[test]
+    fn parse_error_missing_registry() {
+        // Leading slash means empty registry part
+        let input = "/repo:tag";
+        let err = ImageReference::parse(input).unwrap_err();
+        match err {
+            ParseError::MissingRegistry => {}
+            _ => panic!("Expected MissingRegistry error"),
+        }
+    }
+
+    #[test]
+    fn parse_error_missing_repository() {
+        // Trailing slash after registry
+        let input = "registry/:tag";
+        let err = ImageReference::parse(input).unwrap_err();
+        match err {
+            ParseError::MissingRepository => {}
+            _ => panic!("Expected MissingRepository error"),
+        }
+    }
+}

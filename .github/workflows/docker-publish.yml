@@ -5,9 +5,10 @@ on:
     - cron: '31 9 * * *'
   push:
     branches: [ "main" ]
-    tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ "main" ]
+  release:
+    types: [ published ]
 
 env:
   REGISTRY: ghcr.io
@@ -76,3 +77,58 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+  update-release:
+    needs: build
+    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Update GitHub release notes with built Docker image info
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = context.ref.replace('refs/tags/', '');
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: owner,
+              repo: repo,
+              tag: tag
+            });
+            // Fail if release body is empty or undefined
+            if (!release.data.body || release.data.body.trim() === '') {
+              throw new Error(`Release notes for tag ${tag} is empty. Aborting update of release notes.`);
+            }
+            let body = release.data.body;
+            
+            const versionsResponse = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+              package_type: 'container',
+              package_name: repo,
+              org: owner,
+            });
+  
+            // Find the version matching the release tag
+            const matchingVersion = versionsResponse.data.find(version =>
+              version.metadata?.container?.tags?.includes(tag)
+            );
+            
+            if (!matchingVersion) {
+              throw new Error(`No package version found with tag ${tag}`);
+            }
+            
+            const versionId = matchingVersion.id;
+            const packageUrl = "https://github.com/${owner}/${repo}/pkgs/container/${repo}/${versionId}?tag=${tag}"
+            const ghcrImageName = `ghcr.io/${owner}/{repo}:${tag}`;
+            const imageInfo = `\n\n## Images:\nDocker Image: \`${ghcrImageName}\`\nGitHub Packages: [ghcr.io/${owner}/{repo}](${packageUrl})`;
+            
+            if (!body.includes(imageInfo)) {
+              body += imageInfo;
+              await github.rest.repos.updateRelease({
+                owner: owner,
+                repo: repo,
+                release_id: release.data.id,
+                body: body
+              });
+            }

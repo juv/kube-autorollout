@@ -5,9 +5,11 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::info;
 use tracing_subscriber;
 
+mod config;
 mod controller;
 mod image_reference;
 mod oci_registry;
+mod secret_string;
 mod webserver;
 
 #[tokio::main]
@@ -15,22 +17,18 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     info!("Starting kube-autorollout {}", env!("CARGO_PKG_VERSION"));
 
+    let config_file = env::var("CONFIG_FILE").context("CONFIG_FILE is not set")?;
+    let config = config::load_config(config_file)?;
+    info!("Parsed config: {:?}", config);
+
     let token = env::var("REGISTRY_TOKEN").context("REGISTRY_TOKEN is not set")?;
-    let enable_jfrog_artifactory_fallback = env::var("ENABLE_JFROG_ARTIFACTORY_FALLBACK")
-        .context("ENABLE_JFROG_ARTIFACTORY_FALLBACK is not set")?
-        .parse::<bool>()
-        .context("ENABLE_JFROG_ARTIFACTORY_FALLBACK can not be parsed to boolean")?;
-    let port = env::var("WEBSERVER_PORT")
-        .context("WEBSERVER_PORT is not set")?
-        .parse::<u16>()
-        .context("WEBSERVER_PORT can not be parsed to uint16")?;
 
     info!("Initializing K8s controller");
     let client = controller::create_client().await?;
     let ctx = ControllerContext {
         client: client.clone(),
         registry_token: token.clone(),
-        enable_jfrog_artifactory_fallback,
+        enable_jfrog_artifactory_fallback: config.enable_jfrog_artifactory_fallback,
     };
 
     let cron_schedule = env::var("CRON_SCHEDULE").unwrap_or_else(|_| "*/15 * * * * *".to_string());
@@ -50,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
     scheduler.start().await?;
 
     let app = webserver::create_app();
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], config.webserver.port));
     info!("Starting webserver on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

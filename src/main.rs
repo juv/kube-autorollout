@@ -15,8 +15,6 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     info!("Starting kube-autorollout {}", env!("CARGO_PKG_VERSION"));
 
-    info!("Initializing K8s controller");
-    let client = controller::create_client().await?;
     let token = env::var("REGISTRY_TOKEN").context("REGISTRY_TOKEN is not set")?;
     let enable_jfrog_artifactory_fallback = env::var("ENABLE_JFROG_ARTIFACTORY_FALLBACK")
         .context("ENABLE_JFROG_ARTIFACTORY_FALLBACK is not set")?
@@ -26,6 +24,9 @@ async fn main() -> anyhow::Result<()> {
         .context("WEBSERVER_PORT is not set")?
         .parse::<u16>()
         .context("WEBSERVER_PORT can not be parsed to uint16")?;
+
+    info!("Initializing K8s controller");
+    let client = controller::create_client().await?;
     let ctx = ControllerContext {
         client: client.clone(),
         registry_token: token.clone(),

@@ -15,20 +15,16 @@ mod webserver;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
-    info!("Starting kube-autorollout {}", env!("CARGO_PKG_VERSION"));
+    info!("Starting kube-autorollout {} 🚀", env!("CARGO_PKG_VERSION"));
 
     let config_file = env::var("CONFIG_FILE").context("CONFIG_FILE is not set")?;
     let config = config::load_config(config_file)?;
-    info!("Parsed config: {:?}", config);
-
-    let token = env::var("REGISTRY_TOKEN").context("REGISTRY_TOKEN is not set")?;
 
     info!("Initializing K8s controller");
     let client = controller::create_client().await?;
     let ctx = ControllerContext {
         client: client.clone(),
-        registry_token: token.clone(),
-        enable_jfrog_artifactory_fallback: config.enable_jfrog_artifactory_fallback,
+        config: config.clone(),
     };
 
     let cron_schedule = env::var("CRON_SCHEDULE").unwrap_or_else(|_| "*/15 * * * * *".to_string());

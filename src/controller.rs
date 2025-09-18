@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::image_reference::ImageReference;
 use crate::oci_registry::fetch_digest_from_tag;
 use anyhow::Context;
@@ -19,8 +20,7 @@ static KUBE_AUTOROLLOUT_FIELD_MANAGER: &str = "kube-autorollout";
 pub struct ControllerContext {
     /// Kubernetes client
     pub client: Client,
-    pub(crate) registry_token: String,
-    pub enable_jfrog_artifactory_fallback: bool,
+    pub(crate) config: Config,
 }
 
 struct ContainerImageReference {
@@ -75,10 +75,18 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
                     pod_name, reference.container_name, reference.image_reference, reference.digest
                 );
 
+                let registry_config = ctx
+                    .config
+                    .find_registry_for_hostname(&reference.image_reference.registry)
+                    .context(format!(
+                        "Could not find registry configuration for {}",
+                        reference.image_reference.registry
+                    ))?;
+
                 let updated_digest = fetch_digest_from_tag(
                     &reference.image_reference,
-                    ctx.registry_token.as_ref(),
-                    ctx.enable_jfrog_artifactory_fallback,
+                    registry_config.token.expose_secret(),
+                    ctx.config.enable_jfrog_artifactory_fallback,
                 )
                 .await
                 .context("Failed to retrieve updated digest from registry")?;
@@ -163,6 +171,26 @@ async fn get_associated_pod(
 
     pod_list
         .into_iter()
+        .filter(|pod| {
+            let container_statuses = pod
+                .status
+                .clone()
+                .unwrap()
+                .container_statuses
+                .expect("Pods should have container statuses");
+
+            if let Some(invalid_container) = container_statuses.iter().find(|cs| cs.image_id == "")
+            {
+                info!(
+                    "Skipping pod {} because container {} contains an empty imageID field",
+                    pod.metadata.name.as_ref().unwrap(),
+                    invalid_container.name
+                );
+                false
+            } else {
+                true
+            }
+        })
         .next()
         .context(format!("No pod found matching selector {}", label_selector))
 }

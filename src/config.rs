@@ -3,18 +3,9 @@ use anyhow::{Context, Result};
 use globset::{Glob, GlobSet};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::{env, fs, path::Path};
 use tracing::info;
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Config {
-    pub webserver: Webserver,
-    pub registries: Vec<Registry>,
-    #[serde(default, rename = "enableJfrogArtifactoryFallback")]
-    pub enable_jfrog_artifactory_fallback: bool,
-    #[serde(skip)]
-    glob_set: GlobSet,
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Registry {
@@ -29,12 +20,43 @@ pub struct Webserver {
     pub port: u16,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct Tls {
+    #[serde(default, rename = "caCertificatePaths")]
+    pub ca_certificate_paths: Vec<PathBuf>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct FeatureFlags {
+    #[serde(default, rename = "enableJfrogArtifactoryFallback")]
+    pub enable_jfrog_artifactory_fallback: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Config {
+    pub webserver: Webserver,
+    pub registries: Vec<Registry>,
+    #[serde(default)]
+    pub tls: Tls,
+    #[serde(default, rename = "featureFlags")]
+    pub feature_flags: FeatureFlags,
+    #[serde(skip)]
+    glob_set: GlobSet,
+}
+
 impl Config {
     pub fn validate(&self) -> Result<()> {
         for registry in &self.registries {
             Glob::new(&registry.hostname_pattern).context(format!(
                 "invalid hostname pattern {}",
                 registry.hostname_pattern
+            ))?;
+        }
+
+        for ca_certificate_path in &self.tls.ca_certificate_paths {
+            fs::metadata(ca_certificate_path).context(format!(
+                "File {} does not exist or can not be accessed",
+                ca_certificate_path.to_str().unwrap()
             ))?;
         }
         Ok(())
@@ -145,7 +167,10 @@ mod tests {
           - hostnamePattern: "*.example.com"
             username: user
             token: secret_token
-        enableJfrogArtifactoryFallback: true
+        tls:
+          ca_certificate_paths: []
+        featureFlags:
+          enableJfrogArtifactoryFallback: true
         "#;
 
         let tmp_file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
@@ -158,7 +183,7 @@ mod tests {
         assert_eq!(config.registries.len(), 1);
         assert_eq!(config.registries[0].username.as_deref(), Some("user"));
         assert_eq!(config.registries[0].token.expose_secret(), "secret_token");
-        assert_eq!(config.enable_jfrog_artifactory_fallback, true);
+        assert_eq!(config.feature_flags.enable_jfrog_artifactory_fallback, true);
     }
 
     #[test]
@@ -175,7 +200,10 @@ mod tests {
           - hostnamePattern: "*.env.com"
             username: envuser
             token: ${TOKEN}
-        enableJfrogArtifactoryFallback: false
+        tls:
+          ca_certificate_paths: []
+        featureFlags:
+          enableJfrogArtifactoryFallback: false
         "#;
 
         let tmp_file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
@@ -204,7 +232,12 @@ mod tests {
                 username: None,
                 token: SecretString::new("token".to_string()),
             }],
-            enable_jfrog_artifactory_fallback: false,
+            tls: Tls {
+                ca_certificate_paths: Vec::new(),
+            },
+            feature_flags: FeatureFlags {
+                enable_jfrog_artifactory_fallback: false,
+            },
             glob_set: GlobSet::empty(),
         };
         let result = config.validate();
@@ -235,7 +268,12 @@ mod tests {
                     token: SecretString::new("token3".to_string()),
                 },
             ],
-            enable_jfrog_artifactory_fallback: false,
+            tls: Tls {
+                ca_certificate_paths: Vec::new(),
+            },
+            feature_flags: FeatureFlags {
+                enable_jfrog_artifactory_fallback: false,
+            },
             glob_set: GlobSet::empty(),
         };
 

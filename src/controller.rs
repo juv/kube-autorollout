@@ -1,6 +1,6 @@
-use crate::config::Config;
 use crate::image_reference::ImageReference;
 use crate::oci_registry::fetch_digest_from_tag;
+use crate::state::{ContainerImageReference, ControllerContext};
 use anyhow::Context;
 use chrono::Utc;
 use k8s_openapi::api::apps::v1::Deployment;
@@ -16,20 +16,8 @@ static KUBE_AUTOROLLOUT_LABEL: &str = "kube-autorollout/enabled=true";
 static KUBE_AUTOROLLOUT_ANNOTATION: &str = "kube-autorollout/restartedAt";
 static KUBE_AUTOROLLOUT_FIELD_MANAGER: &str = "kube-autorollout";
 
-#[derive(Clone)]
-pub struct ControllerContext {
-    /// Kubernetes client
-    pub client: Client,
-    pub(crate) config: Config,
-}
-
-struct ContainerImageReference {
-    container_name: String,
-    image_reference: ImageReference,
-    digest: String,
-}
-
 pub async fn create_client() -> anyhow::Result<Client> {
+    info!("Initializing K8s controller");
     let client = Client::try_default().await?;
     let api_server_info = client.apiserver_version().await?;
     info!(
@@ -42,8 +30,8 @@ pub async fn create_client() -> anyhow::Result<Client> {
 }
 
 pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
-    let deployments: Api<Deployment> = Api::default_namespaced(ctx.client.clone());
-    let pods: Api<Pod> = Api::default_namespaced(ctx.client.clone());
+    let deployments: Api<Deployment> = Api::default_namespaced(ctx.kube_client.clone());
+    let pods: Api<Pod> = Api::default_namespaced(ctx.kube_client.clone());
     let lp = ListParams::default().labels(KUBE_AUTOROLLOUT_LABEL);
 
     // List the deployments based on label selector (server-side filtering)
@@ -86,7 +74,8 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
                 let updated_digest = fetch_digest_from_tag(
                     &reference.image_reference,
                     registry_config.token.expose_secret(),
-                    ctx.config.enable_jfrog_artifactory_fallback,
+                    &ctx.http_client,
+                    ctx.config.feature_flags.enable_jfrog_artifactory_fallback,
                 )
                 .await
                 .context("Failed to retrieve updated digest from registry")?;

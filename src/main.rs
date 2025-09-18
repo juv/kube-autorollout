@@ -1,4 +1,4 @@
-use crate::controller::ControllerContext;
+use crate::state::ControllerContext;
 use anyhow::Context;
 use std::env;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -10,6 +10,7 @@ mod controller;
 mod image_reference;
 mod oci_registry;
 mod secret_string;
+mod state;
 mod webserver;
 
 #[tokio::main]
@@ -20,11 +21,13 @@ async fn main() -> anyhow::Result<()> {
     let config_file = env::var("CONFIG_FILE").context("CONFIG_FILE is not set")?;
     let config = config::load_config(config_file)?;
 
-    info!("Initializing K8s controller");
-    let client = controller::create_client().await?;
+    let kube_client = controller::create_client().await?;
+    let http_client = oci_registry::create_client(&config)?;
+
     let ctx = ControllerContext {
-        client: client.clone(),
+        kube_client: kube_client.clone(),
         config: config.clone(),
+        http_client,
     };
 
     let cron_schedule = env::var("CRON_SCHEDULE").unwrap_or_else(|_| "*/15 * * * * *".to_string());

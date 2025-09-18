@@ -80,6 +80,8 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
                 .await
                 .context("Failed to retrieve updated digest from registry")?;
 
+                info!("Found updated image digest {}", updated_digest);
+
                 if reference.digest.ne(&updated_digest) {
                     info!(
                         "Triggering rollout for deployment {} to digest {}",

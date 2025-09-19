@@ -29,7 +29,7 @@ When to use kube-autorollout?
 4) ???
 5) Profit
 
-### Key Features
+## Key Features
 
 - **Digest-based updates**: Monitors container image digests rather than semver tags by using the manifest endpoint of
   the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md), successor

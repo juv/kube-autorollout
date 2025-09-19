@@ -13,18 +13,24 @@ change, ensuring your applications stay up-to-date without manual intervention ð
 ## Overview
 
 kube-autorollout monitors Kubernetes deployments and automatically triggers rollouts when new container image versions
-are available. Unlike traditional image update mechanisms that require changing tags, this tool is built to compare
-container image _digests_ for the same, static tag.
+are available. Unlike traditional image update mechanisms that require changing tags via semver version bump, this tool
+is built to compare container image _digests_ for the same, static tag.
 
 When to use kube-autorollout?
 
-- x
-- y
+- Deploying a frequently changing, but static tag like `main` or `latest` on your _development_ environment for your own
+  applications and you want your up-to-date baseline being executed in the Kubernetes cluster.
+- In combination with Prometheus alerts, e.g. the ArgoCD application going into "degraded" health state or pod is stuck
+  in a crash loop after auto-rollout
+- You want to trigger an automated rollout when your CI pipelines have built and pushed the `main`
+- You are deploying image tags that get overridden frequently and that you consider stable enough to rollout
+  automatically, e.g. a [mysql](https://hub.docker.com/_/mysql) image tag of `9.4` or `9`. Those scenarios are **not
+  recommended** in production environments for obvious reasons.
 
 ## tl;dr
 
 1) Install kube-autorollout using the Helm Chart, configure container registries
-2) Select `Deployment` resources for auto-rollout by adding the label `kube-autorollout/enabled=true`
+2) Target `Deployment` resources for auto-rollouts by adding the label `kube-autorollout/enabled=true`
 3) Push images to your container registry with the same _static_ tag
 4) ???
 5) Profit
@@ -32,8 +38,8 @@ When to use kube-autorollout?
 ## Key Features
 
 - **Digest-based updates**: Monitors container image digests rather than semver tags by using the manifest endpoint of
-  the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md), successor
-  of
+  the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md), which can
+  be seen as a more vendor-neutral, interoperable standard of
   the [Docker Registry HTTP API v2](https://github.com/distribution/distribution/blob/5cb406d511b7b9163bff9b6439072e4892e5ae3b/docs/spec/api.md)
 - **Label-based selection**: Uses Kubernetes labels to selectively monitor deployments
 - **Multiple OCI registry support**: Supports multiple container registries in a single instance of kube-autorollout.
@@ -49,6 +55,10 @@ When to use kube-autorollout?
 - **Custom CA certificates**: Support for custom certificate authority certificates for secure TLS connections to
   private registries
 - **Lightweight**: Low container image size, low memory and cpu footprint
+
+## How does it work?
+
+todo
 
 ## Installation
 

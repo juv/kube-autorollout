@@ -11,8 +11,9 @@ spec:
       {{- include "kube-autorollout.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
@@ -39,18 +40,21 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-            - name: REGISTRY_TOKEN
+            - name: CONFIG_FILE
+              {{- $configDirectory := "/opt/app/kube-autorollout/config" }}
+              value: {{ $configDirectory }}/config.yaml
+          {{- range .Values.config.registries }}
+          {{- if .secret }}
+            - name: {{ .secret.key }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.config.registry.secret.name }}
-                  key: {{ .Values.config.registry.secret.key }}
-            - name: WEBSERVER_PORT
-              value: {{ .Values.config.port | quote }}
-            - name: ENABLE_JFROG_ARTIFACTORY_FALLBACK
-              value: {{ .Values.config.enableJfrogArtifactoryFallback | quote }}
+                  name: {{ .secret.name }}
+                  key: {{ .secret.key }}
+          {{- end }}
+          {{- end }}
           ports:
             - name: http
-              containerPort: {{ .Values.config.port }}
+              containerPort: {{ .Values.config.webserver.port }}
               protocol: TCP
           {{- with .Values.livenessProbe }}
           livenessProbe:
@@ -64,6 +68,13 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          volumeMounts:
+            - name: &configVolume config-volume
+              mountPath: {{ $configDirectory }}
+      volumes:
+        - name: *configVolume
+          configMap:
+            name: {{ include "kube-autorollout.fullname" . }}-config
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

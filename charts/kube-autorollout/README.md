@@ -9,12 +9,17 @@ A Helm chart for kube-autorollout
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity configuration for the kube-autorollout controller. More information can be found here: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity |
-| config | object | `{"enableJfrogArtifactoryFallback":false,"port":8080,"registry":{"secret":{"key":"REGISTRY_TOKEN","name":"kube-autorollout-docker-registry-api-token"}}}` | kube-autorollout controller configuration |
-| config.enableJfrogArtifactoryFallback | bool | `false` | Enable JFrog Artifactory fallback when the Artifactory is configured to use the Repository Path Method (https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker) |
-| config.port | int | `8080` | Webserver port |
-| config.registry | object | `{"secret":{"key":"REGISTRY_TOKEN","name":"kube-autorollout-docker-registry-api-token"}}` | Docker Registry config |
-| config.registry.secret.key | string | `"REGISTRY_TOKEN"` | The key to reference in the secret |
-| config.registry.secret.name | string | `"kube-autorollout-docker-registry-api-token"` | Kubernetes Secret name to reference that contains the Docker Registry API token |
+| config.featureFlags.enableJfrogArtifactoryFallback | bool | `false` | Enable JFrog Artifactory fallback when the Artifactory is configured to use the Repository Path Method (https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker) |
+| config.registries | list | `[{"hostnamePattern":null,"secret":{"key":null,"name":null},"token":null,"username":null}]` | Container registries |
+| config.registries[0].secret | object | `{"key":null,"name":null}` | The Kubernetes secret to mount as an environment variable into the pod |
+| config.registries[0].secret.key | string | `nil` | The key to reference of the secret. Will be referenced in the config automatically if .token is unset |
+| config.registries[0].secret.name | string | `nil` | Kubernetes Secret name to reference that contains the Docker Registry API token, personal access token, JFrog Artifactory identity token, etc. |
+| config.registries[0].token | string | `nil` | Not recommended for production use - use .secret instead. A hardcoded token (api token, personal access token, etc.) to be passed in the Authorization header of the Docker manifest request to the registry |
+| config.registries[0].username | string | `nil` | Optional. The username to use for this registry. Only used when the registry is found to be requiring an advanced token flow for authentication, that involves trading in the username and api key / api token into a short-living OAuth2.0-esque access token. This is required for ghcr.io and docker.io |
+| config.tls | object | `{"caCertificatePaths":[]}` | TLS configuration |
+| config.tls.caCertificatePaths | list | `[]` | Custom CA certificate paths within the container |
+| config.webserver | object | `{"port":8080}` | Webserver configuration |
+| config.webserver.port | int | `8080` | Webserver port |
 | fullnameOverride | string | `""` | String to fully override `"kube-autorollout.fullname"` |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for the container image |
 | image.repository | string | `"ghcr.io/juv/kube-autorollout"` | The image repository name to use for the container image |

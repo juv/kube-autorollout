@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kube-autorollout.fullname" . }}-config
+  labels:
+    {{- include "kube-autorollout.labels" . | nindent 4 }}
+data:
+  config.yaml: |-
+    webserver:
+      port: {{ .Values.config.webserver.port }}
+    registries:
+    {{- range .Values.config.registries }}
+      - hostnamePattern: {{ .hostnamePattern | quote }}
+        username: {{ .username | quote }}
+        {{- if .token }}
+        token: {{ .token | quote }}
+        {{- else if and .secret .secret.key }}
+        token: {{ printf "${%s}" .secret.key | quote }}
+        {{- else }}
+        {{ fail "registry must contain .token or .secret.key (the latter is preferred)" }}
+        {{ end }}
+    {{- end }}
+    tls:
+      caCertificatePaths:
+      {{- if .Values.config.tls.caCertificatePaths }}
+      {{- range .Values.config.tls.caCertificatePaths }}
+        - {{ . }}
+      {{- end }}
+      {{- else }}
+        []
+      {{- end }}
+    featureFlags:
+      enableJfrogArtifactoryFallback: {{ .Values.config.featureFlags.enableJfrogArtifactoryFallback }}

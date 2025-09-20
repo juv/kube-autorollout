@@ -1,4 +1,4 @@
-name: Docker Build
+name: Helm Publish
 
 on:
   push:
@@ -50,5 +50,5 @@ jobs:
       - name: Push Helm Chart to GHCR
         if: steps.chart_changed.outputs.changed == 'true'
         run: |
-          CHART_VERSION=$(helm show chart --output json ./charts/kube-autorollout | jq -r .version)
+          CHART_VERSION=$(helm show chart ./charts/kube-autorollout | grep version | awk '{ print $2 }')
           helm push ./kube-autorollout-${CHART_VERSION}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts

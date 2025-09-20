@@ -1,10 +1,10 @@
 # kube-autorollout
 
-![Build Status](https://github.com/juv/kube-autorollout/actions/workflows/docker-publish.yml/badge.svg)
-![GitHub License](https://img.shields.io/github/license/juv/kube-autorollout?color=blue)
-![Helm Chart](https://img.shields.io/badge/Helm_Chart-available-blue)
-![Docker Images](https://img.shields.io/badge/Docker_images-GHCR-blue?logo=docker)
 ![Rust](https://shields.io/badge/-Rust-3776AB?style=flat&logo=rust&color=blue)
+![Build Status](https://github.com/juv/kube-autorollout/actions/workflows/docker-publish.yml/badge.svg)
+[![GitHub License](https://img.shields.io/github/license/juv/kube-autorollout?color=blue)](./LICENSE)
+[![Docker Images](https://img.shields.io/badge/Docker_images-GHCR-blue?logo=docker)](https://github.com/juv/kube-autorollout/pkgs/container/kube-autorollout)
+[![Artifact Hub](https://img.shields.io/endpoint?color=blue&url=https://artifacthub.io/badge/repository/kube-autorollout)](https://artifacthub.io/packages/search?repo=kube-autorollout)
 
 A lightweight Kubernetes controller that automatically triggers Kubernetes `Deployment` rollouts when container image
 _digests_ change, ensuring your applications stay up-to-date without manual intervention 🚀

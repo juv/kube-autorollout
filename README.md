@@ -7,48 +7,53 @@
 ![Rust](https://shields.io/badge/-Rust-3776AB?style=flat&logo=rust&color=blue)
 
 A lightweight Kubernetes controller that automatically triggers Kubernetes `Deployment` rollouts when container image
-_digests_
-change, ensuring your applications stay up-to-date without manual intervention 🚀
+_digests_ change, ensuring your applications stay up-to-date without manual intervention 🚀
 
 ## Overview
 
 kube-autorollout monitors Kubernetes deployments and automatically triggers rollouts when new container image versions
-are available. Unlike traditional image update mechanisms that require changing tags via semver version bump, this tool
-is built to compare container image _digests_ for the same, static tag.
+are available. Unlike other image update mechanisms that require changing tags via semver version bump, this tool
+is built to compare container [image digests](https://docs.docker.com/dhi/core-concepts/digests/) (`@sha256:...`) for
+the same, static tag.
 
 When to use kube-autorollout?
 
-- Deploying a frequently changing, but static tag like `main` or `latest` on your _development_ environment for your own
-  applications and you want your up-to-date baseline being executed in the Kubernetes cluster.
-- In combination with Prometheus alerts, e.g. the ArgoCD application going into "degraded" health state or pod is stuck
-  in a crash loop after auto-rollout
-- You want to trigger an automated rollout when your CI pipelines have built and pushed the `main`
-- You are deploying image tags that get overridden frequently and that you consider stable enough to rollout
-  automatically, e.g. a [mysql](https://hub.docker.com/_/mysql) image tag of `9.4` or `9`. Those scenarios are **not
-  recommended** in production environments for obvious reasons.
+- Deploying your application's frequently changing, static tag like `latest`, `main`, `nightly`, etc. and you want
+  your up-to-date baseline being executed in the Kubernetes cluster. Particularly suited for development environments.
+- CI/CD pipelines are less complex and stay declarative. No imperative tasks, no fake Helm chart version bumps, no
+  additional git commits in your pipelines to trigger rollouts
+- Immediate feedback loop in combination with your existing Prometheus alerts, e.g. "pod is stuck in a crash loop" or "
+  ArgoCD application going into degraded health state"
+- ArgoCD Image Updater only supports ArgoCD applications but your development environments contains both ArgoCD
+  applications as well as manually installed Helm chart releases, for which you want automated rollouts.
+  kube-autorollout will automate rollouts for the supported Kubernetes resources, no matter which tool installed
+  them in the first place.
 
 ## tl;dr
 
-1) Install kube-autorollout using the Helm Chart, configure container registries
+1) Install kube-autorollout using the Helm chart, configure container registries
 2) Target `Deployment` resources for auto-rollouts by adding the label `kube-autorollout/enabled=true`
-3) Push images to your container registry with the same _static_ tag
+3) Push images to your container registry with the same **static** tag, e.g. `latest`, `main`, `nightly`
 4) ???
 5) Profit
 
 ## Key Features
 
-- **Digest-based updates**: Monitors container image digests rather than semver tags by using the manifest endpoint of
+- **Digest-based updates**: Monitors container [image digests](https://docs.docker.com/dhi/core-concepts/digests/)
+  rather than semver tags by using the manifests endpoint of
   the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md), which can
   be seen as a more vendor-neutral, interoperable standard of
   the [Docker Registry HTTP API v2](https://github.com/distribution/distribution/blob/5cb406d511b7b9163bff9b6439072e4892e5ae3b/docs/spec/api.md)
 - **Label-based selection**: Uses Kubernetes labels to selectively monitor deployments
 - **Multiple OCI registry support**: Supports multiple container registries in a single instance of kube-autorollout.
-  Including Docker Hub, GitHub Container
-  Registry (
-  GHCR.io), JFrog Artifactory, and custom registries
+  Including Docker Hub (docker.io, registry-1.docker.io), GitHub Container Registry (ghcr.io), JFrog Artifactory, and
+  custom registries as long as they implement the OCI Distribution Specification
 - **GitOps compatiblity**: Compatible to GitOps tools like ArgoCD and FluxCD
-- **JFrog Artifactory compatiblity**: Special handling for JFrog Artifactory with Repository Path Method
-- **Multi-container rollout**: Special handling for JFrog Artifactory with Repository Path Method
+- **JFrog Artifactory compatiblity**: Special handling for JFrog Artifactory
+  with a configuration of
+  the [repository path method for docker](https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
+- **Multi-container rollout**: Supports automated rollouts for Deployments with a pod template containing multiple
+  containers
 - **Flexible authentication**: Supports various authentication methods including API tokens, personal access tokens, and
   OAuth2 flows
 - **Cron-based scheduling**: Configurable scheduling of the main controller loop with cron expressions
@@ -64,9 +69,9 @@ todo
 
 ### Using Helm
 
-kube-autorollout is supposed to be installed using the [Helm Chart](charts/kube-autorollout).
+kube-autorollout is supposed to be installed using the [Helm chart](charts/kube-autorollout).
 
-kube-autorollout is meant to be installed in each namespace where you want to enable rollouts.
+kube-autorollout is supposed to be installed in each Kubernetes namespace where you want to enable automated rollouts.
 
 ```bash
 
@@ -75,10 +80,10 @@ kube-autorollout is meant to be installed in each namespace where you want to en
 
 ### Configuration
 
-Create a values file that covers all registries for your deployments that are labeled with
+Create a Helm values file that covers all registries for your deployments that are labeled with
 `kube-autorollout/enabled=true`.
 
-For full field reference, see the [Helm Chart](charts/kube-autorollout) README.
+For full field reference, see the [Helm chart](charts/kube-autorollout) README.
 
 ```yaml
 webserver:
@@ -91,13 +96,13 @@ registries:
       # -- Kubernetes Secret name to reference that contains the Docker Registry API token
       name: kube-autorollout-jfrog-api-token
       # -- The key to reference in the secret, will be referenced in the config automatically if .token is unset
-      key: REGISTRY_TOKEN
+      key: IDENTITY_TOKEN
 
   #JFrog Artifactory registry with "repository path method for docker" https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker
   - hostnamePattern: "another-artifactory.example.com"
     secret:
       name: kube-autorollout-jfrog-api-token
-      key: REGISTRY_TOKEN
+      key: IDENTITY_TOKEN
 
   - hostnamePattern: "ghcr.io"
     username: "github-username-123"
@@ -112,17 +117,17 @@ registries:
       key: PERSONAL_ACCESS_TOKEN
 
 featureFlags:
-  #Enables a fallback for Artifactory's "repository path method for docker" setup
+  #Enables an automated fallback for Artifactory's "repository path method for docker" setup
   enableJfrogArtifactoryFallback: true
 ```
 
-kube-autorollout expects your Kubernetes secrets to be existing before installing the Helm Chart.
+kube-autorollout expects your Kubernetes secrets to be existing before installing the Helm chart.
 For a quick start, you can create the above-mentioned secret examples like this:
 
 JFrog Artifactory:
 
 ```
-kubectl create secret generic kube-autorollout-jfrog-api-token --from-literal=REGISTRY_TOKEN=<jfrog-identity-token-here>
+kubectl create secret generic kube-autorollout-jfrog-api-token --from-literal=IDENTITY_TOKEN=<jfrog-identity-token-here>
 ```
 
 GitHub personal access token:
@@ -160,11 +165,15 @@ spec:
       containers:
         - name: my-app
           image: ghcr.io/myorg/my-app:latest
+          # ...
+        - name: another-app
+          image: ghcr.io/another-org/another-app:main
 ```
 
 ### Environment Variables
 
 - `CONFIG_FILE`: The Helm chart automatically configures the required `CONFIG_FILE` environment variable automatically
+  and mounts the config file into the kube-autorollout pod
 - Registry secrets are mounted as pod environment variables and referenced in the application config using
   `${ENV_VAR_NAME}` syntax automatically
 
@@ -172,23 +181,21 @@ spec:
 
 - **Docker Hub** (`docker.io` / `registry-1.docker.io`) - Requires username and personal access token
 - **GitHub Container Registry** (`ghcr.io`) - Requires username and personal access token
-- **JFrog Artifactory** - Requires an identity token. Supports both
+- **JFrog Artifactory** - Requires an Artifactory identity token. Supports both
   the [subdomain method for docker](https://jfrog.com/help/r/jfrog-artifactory-documentation/the-subdomain-method-for-docker)
   and [repository path method for docker](https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
   setup
 
-Other registries are untested but potentially work in some combination as long as they follow the
-the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md) or
-[Docker Registry HTTP API v2](https://github.com/distribution/distribution/blob/5cb406d511b7b9163bff9b6439072e4892e5ae3b/docs/spec/api.md)
-, please create a pull request to this README.md file to let other users know that a certain registry is supported -
-thanks :-).
+Other registries are untested but likely work in some combination as long as they follow the
+the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md), please
+create a pull request to this README.md file to let other users know that a certain registry is supported -
+thank you :-).
 
 ## Security considerations
 
-- Store sensitive tokens in Kubernetes secrets rather than plain text
-- Use least-privilege access tokens for registry authentication
-- Regularly rotate your tokens
-- Consider using image signatures for additional security
+- Store sensitive tokens in Kubernetes secrets rather than plain text in the Helm chart
+- Use least-privilege api tokens for registry authentication
+- Regularly rotate your api tokens
 
 ## Metrics
 
@@ -204,11 +211,11 @@ todo
 2. No `Deployment` rollouts occur
     - Ensure kube-autorollout is running in the correct Kubernetes namespace
     - Verify the `kube-autorollout/enabled=true` label is present on each `Deployment` of interest
+    - Make sure you pushed your image, duh
     - Check kube-autorollout log for error messages
     - Check RBAC permissions for your kube-autorollout `serviceaccount` in case you are not using the
-      `rbac.enabled=true` Helm Chart configuration
+      `rbac.enabled=true` Helm chart configuration
     - Check the cache settings for image metadata of your registry
-    - Push your image, duh
 
 ## License
 
@@ -218,11 +225,3 @@ This project is licensed under the Apache License 2.0 - see [LICENSE](LICENSE).
 
 - Report bugs and feature requests in [GitHub issues](https://github.com/juv/kube-autorollout/issues)
 - Ask questions in the [GitHub discussions](https://github.com/juv/kube-autorollout/discussions)
-
-## Roadmap
-
-- [ ] Support for StatefulSets and DaemonSets
-- [ ] Prometheus metrics exporter
-- [ ] Prometheus alerts in the Helm Chart
-- [ ] Rollout threshold per deployment
-- [ ] Webhook-based trigger mechanisms

@@ -10,7 +10,7 @@ use kube::{Api, Client};
 use serde_json::json;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 static KUBE_AUTOROLLOUT_LABEL: &str = "kube-autorollout/enabled=true";
 static KUBE_AUTOROLLOUT_ANNOTATION: &str = "kube-autorollout/restartedAt";
@@ -236,7 +236,7 @@ fn warn_misconfigured_container_image_pull_policies(pod: &Pod) {
         .iter()
         .filter(|container| container.image_pull_policy.as_deref().unwrap() != "Always")
         .for_each(|container| {
-            info!(
+            warn!(
                 "Container {} in pod {} has a misconfigured imagePullPolicy. Should be 'Always', to have an effect with kube-autorollout",
                 container.name, pod.metadata.name.as_ref().unwrap()
             )

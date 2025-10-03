@@ -10,7 +10,7 @@ strip = "symbols"      # https://doc.rust-lang.org/cargo/reference/profiles.html
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-tokio-cron-scheduler = { version = "0.14.0", features = ["signal"] }
+tokio-cron-scheduler = { version = "0.15.0", features = ["signal"] }
 tokio-util = { version = "0.7.16" }
 axum = "0.8.4"
 kube = { version = "2.0.1", features = ["runtime", "derive"] }

@@ -31,3 +31,4 @@ data:
       {{- end }}
     featureFlags:
       enableJfrogArtifactoryFallback: {{ .Values.config.featureFlags.enableJfrogArtifactoryFallback }}
+      enableKubectlAnnotation: {{ .Values.config.featureFlags.enableKubectlAnnotation }}

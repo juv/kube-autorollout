@@ -55,6 +55,8 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
             let pod = get_associated_pod(&pods, &selector).await?;
             let pod_name = pod.metadata.name.as_ref().unwrap();
 
+            warn_misconfigured_container_image_pull_policies(&pod);
+
             let container_image_references = get_pod_container_image_references(&pod);
 
             for reference in container_image_references?.iter() {
@@ -224,4 +226,19 @@ fn get_container_image_reference(
         image_reference,
         digest,
     })
+}
+
+fn warn_misconfigured_container_image_pull_policies(pod: &Pod) {
+    pod.spec
+        .as_ref()
+        .unwrap()
+        .containers
+        .iter()
+        .filter(|container| container.image_pull_policy.as_deref().unwrap() != "Always")
+        .for_each(|container| {
+            info!(
+                "Container {} in pod {} has a misconfigured imagePullPolicy. Should be 'Always', to have an effect with kube-autorollout",
+                container.name, pod.metadata.name.as_ref().unwrap()
+            )
+        });
 }

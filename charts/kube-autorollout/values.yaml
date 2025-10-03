@@ -4,6 +4,8 @@
 replicaCount: 1
 
 config:
+  # -- The cron schedule to execute the main controller code, given in a format supported by Croner: https://github.com/Hexagon/croner-rust?tab=readme-ov-file#pattern. Default: "*/45 * * * * *" to execute every 45 seconds
+  cronSchedule: "*/45 * * * * *"
   # -- Webserver configuration
   webserver:
     # -- Webserver port

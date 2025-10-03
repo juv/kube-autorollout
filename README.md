@@ -54,8 +54,6 @@ When to use kube-autorollout?
   the [repository path method for docker](https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
 - **Multi-container rollout**: Supports automated rollouts for Deployments with a pod template containing multiple
   containers
-- **Flexible authentication**: Supports various authentication methods including API tokens, personal access tokens, and
-  OAuth2 flows
 - **Cron-based scheduling**: Configurable scheduling of the main controller loop with cron expressions
 - **Custom CA certificates**: Support for custom certificate authority certificates for secure TLS connections to
   private registries
@@ -63,7 +61,7 @@ When to use kube-autorollout?
 
 ## How does it work?
 
-todo
+todo: add diagram, description
 
 ## Installation
 
@@ -75,7 +73,7 @@ kube-autorollout is supposed to be installed in each Kubernetes namespace where 
 
 ```bash
 
-# todo 
+# todo
 ```
 
 ### Configuration
@@ -181,10 +179,10 @@ spec:
 
 - **Docker Hub** (`docker.io` / `registry-1.docker.io`) - Requires username and personal access token
 - **GitHub Container Registry** (`ghcr.io`) - Requires username and personal access token
-- **JFrog Artifactory** - Requires an Artifactory identity token. Supports both
+- **JFrog Artifactory** - Requires an Artifactory identity token. Both
   the [subdomain method for docker](https://jfrog.com/help/r/jfrog-artifactory-documentation/the-subdomain-method-for-docker)
   and [repository path method for docker](https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
-  setup
+  setups are supported.
 
 Other registries are untested but likely work in some combination as long as they follow the
 the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md), please
@@ -193,7 +191,7 @@ thank you :-).
 
 ## Security considerations
 
-- Store sensitive tokens in Kubernetes secrets rather than plain text in the Helm chart
+- Store sensitive tokens in Kubernetes secrets rather than plain text in the Helm chart values
 - Use least-privilege api tokens for registry authentication
 - Regularly rotate your api tokens
 

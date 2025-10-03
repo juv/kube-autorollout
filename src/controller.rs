@@ -10,7 +10,7 @@ use kube::{Api, Client};
 use serde_json::json;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 static KUBE_AUTOROLLOUT_LABEL: &str = "kube-autorollout/enabled=true";
 static KUBE_AUTOROLLOUT_ANNOTATION: &str = "kube-autorollout/restartedAt";
@@ -54,6 +54,8 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
             let selector = spec.selector.match_labels.clone().unwrap();
             let pod = get_associated_pod(&pods, &selector).await?;
             let pod_name = pod.metadata.name.as_ref().unwrap();
+
+            warn_misconfigured_container_image_pull_policies(&pod);
 
             let container_image_references = get_pod_container_image_references(&pod);
 
@@ -224,4 +226,19 @@ fn get_container_image_reference(
         image_reference,
         digest,
     })
+}
+
+fn warn_misconfigured_container_image_pull_policies(pod: &Pod) {
+    pod.spec
+        .as_ref()
+        .unwrap()
+        .containers
+        .iter()
+        .filter(|container| container.image_pull_policy.as_deref().unwrap() != "Always")
+        .for_each(|container| {
+            warn!(
+                "Container {} in pod {} has a misconfigured imagePullPolicy. Should be 'Always', to have an effect with kube-autorollout",
+                container.name, pod.metadata.name.as_ref().unwrap()
+            )
+        });
 }

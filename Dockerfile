@@ -8,7 +8,8 @@ RUN rustup target add x86_64-unknown-linux-musl
 
 RUN apk add musl-dev openssl-dev openssl-libs-static
 
-# Build the application in release mode with static linking
+# Build the application in release mode with static linking, compressing debug sections
+ENV RUSTFLAGS="-C link-arg=-Wl,--compress-debug-sections=zlib"
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
 FROM scratch

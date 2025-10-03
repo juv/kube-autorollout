@@ -3,6 +3,11 @@ name = "kube-autorollout"
 version = "0.1.0"
 edition = "2024"
 
+[profile.release]
+opt-level = 3          # https://doc.rust-lang.org/cargo/reference/profiles.html#opt-level
+lto = true             # https://doc.rust-lang.org/cargo/reference/profiles.html#lto
+strip = "symbols"      # https://doc.rust-lang.org/cargo/reference/profiles.html#strip
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-cron-scheduler = { version = "0.14.0", features = ["signal"] }

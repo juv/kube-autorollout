@@ -15,6 +15,7 @@ use tracing::{debug, info, warn};
 static KUBE_AUTOROLLOUT_LABEL: &str = "kube-autorollout/enabled=true";
 static KUBE_AUTOROLLOUT_ANNOTATION: &str = "kube-autorollout/restartedAt";
 static KUBE_AUTOROLLOUT_FIELD_MANAGER: &str = "kube-autorollout";
+static KUBECTL_ROLLOUT_ANNOTATION: &str = "kubectl.kubernetes.io/restartedAt";
 
 pub async fn create_client() -> anyhow::Result<Client> {
     info!("Initializing K8s controller");
@@ -89,12 +90,16 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
                         "Triggering rollout for deployment {} to digest {}",
                         deployment_name, updated_digest
                     );
-                    patch_deployment(&deployments, &deployment_name)
-                        .await
-                        .context(format!(
-                            "Failed to patch deployment {} to trigger rollout",
-                            deployment_name
-                        ))?;
+                    patch_deployment(
+                        &deployments,
+                        &deployment_name,
+                        ctx.config.feature_flags.enable_kubectl_annotation,
+                    )
+                    .await
+                    .context(format!(
+                        "Failed to patch deployment {} to trigger rollout",
+                        deployment_name
+                    ))?;
                     info!(
                         "Successfully triggered rollout for deployment {}",
                         deployment_name
@@ -118,13 +123,22 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn patch_deployment(deployments: &Api<Deployment>, name: &String) -> anyhow::Result<()> {
+async fn patch_deployment(
+    deployments: &Api<Deployment>,
+    name: &String,
+    enable_kubectl_annotation: bool,
+) -> anyhow::Result<()> {
+    let annotation = match enable_kubectl_annotation {
+        true => KUBECTL_ROLLOUT_ANNOTATION,
+        false => KUBE_AUTOROLLOUT_ANNOTATION,
+    };
+
     let patch = json!({
         "spec": {
             "template": {
                 "metadata": {
                     "annotations": {
-                        KUBE_AUTOROLLOUT_ANNOTATION: Utc::now().to_rfc3339(),
+                        annotation: Utc::now().to_rfc3339(),
                     }
                 }
             }

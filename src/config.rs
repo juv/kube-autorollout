@@ -30,6 +30,8 @@ pub struct Tls {
 pub struct FeatureFlags {
     #[serde(default, rename = "enableJfrogArtifactoryFallback")]
     pub enable_jfrog_artifactory_fallback: bool,
+    #[serde(default, rename = "enableKubectlAnnotation")]
+    pub enable_kubectl_annotation: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -237,6 +239,7 @@ mod tests {
             },
             feature_flags: FeatureFlags {
                 enable_jfrog_artifactory_fallback: false,
+                enable_kubectl_annotation: false,
             },
             glob_set: GlobSet::empty(),
         };
@@ -273,6 +276,7 @@ mod tests {
             },
             feature_flags: FeatureFlags {
                 enable_jfrog_artifactory_fallback: false,
+                enable_kubectl_annotation: false,
             },
             glob_set: GlobSet::empty(),
         };

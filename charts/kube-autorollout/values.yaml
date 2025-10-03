@@ -29,6 +29,8 @@ config:
   featureFlags:
     # -- Enable JFrog Artifactory fallback when the Artifactory is configured to use the Repository Path Method (https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
     enableJfrogArtifactoryFallback: false
+    # -- Change the kube-autorollout patch annotation key (that triggers the redeployment) from "kube-autorollout/restartedAt" to "kubectl.kubernetes.io/restartedAt". The latter annotation is applied by kubectl when executing the command "kubectl rollout restart". Most GitOps tools like ArgoCD and FluxCD ignore the kubectl annotation from state drift detection. If you are not using this value on "true" you might need to add further configuration to ArgoCD and FluxCD to not show the kube-autorollout annotation as a state drift.
+    enableKubectlAnnotation: false
 
 #-- Sets the kube-autorollout container image. More information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:

@@ -9,7 +9,7 @@ A Helm chart for kube-autorollout
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity configuration for the kube-autorollout controller. More information can be found here: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity |
-| config.cronSchedule | string | `"*/15 * * * * *"` | The cron schedule to execute the main controller code, given in a format supported by Croner: https://github.com/Hexagon/croner-rust?tab=readme-ov-file#pattern. Example: "*/15 * * * * *" to execute every 15 seconds |
+| config.cronSchedule | string | `"*/45 * * * * *"` | The cron schedule to execute the main controller code, given in a format supported by Croner: https://github.com/Hexagon/croner-rust?tab=readme-ov-file#pattern. Default: "*/45 * * * * *" to execute every 45 seconds |
 | config.featureFlags.enableJfrogArtifactoryFallback | bool | `false` | Enable JFrog Artifactory fallback when the Artifactory is configured to use the Repository Path Method (https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker) |
 | config.registries | list | `[{"hostnamePattern":null,"secret":{"key":null,"name":null},"token":null,"username":null}]` | Container registries |
 | config.registries[0].secret | object | `{"key":null,"name":null}` | The Kubernetes secret to mount as an environment variable into the pod |

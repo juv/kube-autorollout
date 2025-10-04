@@ -6,6 +6,7 @@ metadata:
     {{- include "kube-autorollout.labels" . | nindent 4 }}
 data:
   config.yaml: |-
+    cronSchedule: {{ .Values.config.cronSchedule }}
     webserver:
       port: {{ .Values.config.webserver.port }}
     registries:

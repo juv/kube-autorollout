@@ -36,6 +36,8 @@ pub struct FeatureFlags {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
+    #[serde(default = "default_cron_schedule", rename = "cronSchedule")]
+    pub cron_schedule: String,
     pub webserver: Webserver,
     pub registries: Vec<Registry>,
     #[serde(default)]
@@ -44,6 +46,10 @@ pub struct Config {
     pub feature_flags: FeatureFlags,
     #[serde(skip)]
     glob_set: GlobSet,
+}
+
+fn default_cron_schedule() -> String {
+    "*/45 * * * * *".to_string()
 }
 
 impl Config {
@@ -228,6 +234,7 @@ mod tests {
     #[test]
     fn test_validate_invalid_pattern() {
         let config = Config {
+            cron_schedule: String::new(),
             webserver: Webserver { port: 8080 },
             registries: vec![Registry {
                 hostname_pattern: "[invalid".to_string(), // invalid glob pattern
@@ -253,6 +260,7 @@ mod tests {
     #[test]
     fn test_setup_glob_set_and_find_registry() {
         let mut config = Config {
+            cron_schedule: String::new(),
             webserver: Webserver { port: 8080 },
             registries: vec![
                 Registry {

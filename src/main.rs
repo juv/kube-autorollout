@@ -56,14 +56,16 @@ async fn main() -> anyhow::Result<()> {
         http_client,
     };
 
-    let cron_schedule = env::var("CRON_SCHEDULE").unwrap_or_else(|_| "*/15 * * * * *".to_string());
-    info!("Executing job scheduler at cron schedule {}", cron_schedule);
+    info!(
+        "Executing job scheduler at cron schedule {}",
+        config.cron_schedule
+    );
     let mut scheduler = JobScheduler::new().await?;
     let main_cancellation_token = CancellationToken::new();
     let cronjob_cancellation_token = main_cancellation_token.clone();
 
     // Add a job scheduled to run
-    let job = Job::new_async(cron_schedule, move |_uuid, _l| {
+    let job = Job::new_async(config.cron_schedule, move |_uuid, _l| {
         let ctx = ctx.clone();
         let cronjob_cancellation_token = cronjob_cancellation_token.clone();
         Box::pin(async move {

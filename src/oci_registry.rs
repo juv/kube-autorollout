@@ -1,4 +1,5 @@
-use crate::config::Config;
+use crate::config::RegistrySecret::{ImagePullSecret, Opaque};
+use crate::config::{Config, RegistrySecret};
 use crate::image_reference::ImageReference;
 use anyhow::{Context, Result};
 use axum::http::HeaderMap;
@@ -28,7 +29,7 @@ pub fn create_client(config: &Config) -> Result<Client> {
 
 pub async fn fetch_digest_from_tag(
     image_reference: &ImageReference,
-    registry_auth_token: &str,
+    registry_secret: &RegistrySecret,
     client: &Client,
     enable_jfrog_artifactory_fallback: bool,
 ) -> Result<String> {
@@ -38,7 +39,7 @@ pub async fn fetch_digest_from_tag(
         registry, image_reference.repository, image_reference.tag
     );
 
-    let response = fetch_docker_manifest(client, image_reference, registry_auth_token, &url)
+    let response = fetch_docker_manifest(client, image_reference, registry_secret, &url)
         .await
         .with_context(|| format!("Failed to fetch manifest from {}", url))?;
 
@@ -56,7 +57,7 @@ pub async fn fetch_digest_from_tag(
             );
 
             let response =
-                fetch_docker_manifest(client, image_reference, registry_auth_token, &fallback_url)
+                fetch_docker_manifest(client, image_reference, registry_secret, &fallback_url)
                     .await
                     .context(format!(
                         "Failed to fetch manifest from Artifactory fallback url {}",
@@ -82,14 +83,18 @@ pub async fn fetch_digest_from_tag(
 async fn fetch_docker_manifest(
     client: &Client,
     image_reference: &ImageReference,
-    registry_auth_token: &str,
+    registry_secret: &RegistrySecret,
     url: &str,
 ) -> Result<Response> {
     info!("Fetching docker manifest for from URL {}", url);
+
+    let authorization_header = get_authorization_header(registry_secret);
+    info!("Using authorization header {}", authorization_header);
+
     let response = client
         .get(url)
         .header(ACCEPT, "application/vnd.oci.image.manifest.v1+json")
-        .header(AUTHORIZATION, format!("Bearer {}", registry_auth_token))
+        .header(AUTHORIZATION, authorization_header)
         .send()
         .await
         .context("Failed to send request to fetch manifest")?;
@@ -138,4 +143,17 @@ fn is_artifactory_response(response_headers: &HeaderMap) -> bool {
     response_headers.contains_key("x-jfrog-version")
         || response_headers.contains_key("x-artifactory-id")
         || response_headers.contains_key("x-artifactory-node-id")
+}
+
+fn get_authorization_header(registry_secret: &RegistrySecret) -> String {
+    match registry_secret {
+        Opaque { token, .. } => format!("Bearer {}", token.expose_secret()),
+        ImagePullSecret { docker_config, .. } => {
+            format!(
+                "Basic {}",
+                docker_config.auths.iter().next().unwrap().1.auth
+            )
+        }
+        RegistrySecret::None => String::new(),
+    }
 }

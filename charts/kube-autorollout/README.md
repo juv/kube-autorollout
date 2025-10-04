@@ -1,6 +1,6 @@
 # kube-autorollout
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.0](https://img.shields.io/badge/AppVersion-0.1.0-informational?style=flat-square)
+![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.0](https://img.shields.io/badge/AppVersion-0.1.0-informational?style=flat-square)
 
 A Helm chart for kube-autorollout
 
@@ -12,12 +12,14 @@ A Helm chart for kube-autorollout
 | config.cronSchedule | string | `"*/45 * * * * *"` | The cron schedule to execute the main controller code, given in a format supported by Croner: https://github.com/Hexagon/croner-rust?tab=readme-ov-file#pattern. Default: "*/45 * * * * *" to execute every 45 seconds |
 | config.featureFlags.enableJfrogArtifactoryFallback | bool | `false` | Enable JFrog Artifactory fallback when the Artifactory is configured to use the Repository Path Method (https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker) |
 | config.featureFlags.enableKubectlAnnotation | bool | `false` | Change the kube-autorollout patch annotation key (that triggers the redeployment) from "kube-autorollout/restartedAt" to "kubectl.kubernetes.io/restartedAt". The latter annotation is applied by kubectl when executing the command "kubectl rollout restart". Most GitOps tools like ArgoCD and FluxCD ignore the kubectl annotation from state drift detection. If you are not using this value on "true" you might need to add further configuration to ArgoCD and FluxCD to not show the kube-autorollout annotation as a state drift. |
-| config.registries | list | `[{"hostnamePattern":null,"secret":{"key":null,"name":null},"token":null,"username":null}]` | Container registries |
-| config.registries[0].secret | object | `{"key":null,"name":null}` | The Kubernetes secret to mount as an environment variable into the pod |
-| config.registries[0].secret.key | string | `nil` | The key to reference of the secret. Will be referenced in the config automatically if .token is unset |
-| config.registries[0].secret.name | string | `nil` | Kubernetes Secret name to reference that contains the Docker Registry API token, personal access token, JFrog Artifactory identity token, etc. |
-| config.registries[0].token | string | `nil` | Not recommended for production use - use .secret instead. A hardcoded token (api token, personal access token, etc.) to be passed in the Authorization header of the Docker manifest request to the registry |
-| config.registries[0].username | string | `nil` | Optional. The username to use for this registry. Only used when the registry is found to be requiring an advanced token flow for authentication, that involves trading in the username and api key / api token into a short-living OAuth2.0-esque access token. This is required for ghcr.io and docker.io |
+| config.registries | list | `[{"hostnamePattern":"ghcr.io","secret":{"key":null,"mountPath":null,"name":null,"token":null,"type":"None","username":null}}]` | Container registries |
+| config.registries[0].secret | object | `{"key":null,"mountPath":null,"name":null,"token":null,"type":"None","username":null}` | The Kubernetes secret to mount as an environment variable into the pod |
+| config.registries[0].secret.key | string | `nil` | OPTIONAL FOR <Opaque>: The key to reference of the secret. Will be referenced in the config automatically if .token is unset |
+| config.registries[0].secret.mountPath | string | `nil` | REQUIRED FOR <ImagePullSecret>: The mount path of the ImagePullSecret within the kube-autorollout pod. Must be unique across registry secrets. |
+| config.registries[0].secret.name | string | `nil` | Kubernetes Secret name of secret type Opaque or ImagePullSecret to reference. The secret should contain the Docker Registry API token, personal access token, JFrog Artifactory identity token, etc. |
+| config.registries[0].secret.token | string | `nil` | OPTIONAL FOR <Opaque>: Not recommended for production use - use .name and .key instead. A hardcoded token (api token, personal access token, etc.) to be passed in the Authorization header of the Docker manifest request to the registry |
+| config.registries[0].secret.type | string | `"None"` | REQUIRED: The type of the secret - ImagePullSecret, Opaque, None. <ImagePullSecret> must define keys "name" and "mountPath". <Opaque> with Kubernetes Secret must define keys "name" and "key", optionally "username". <Opaque> with hardcoded token must define keys "token". <None> will ignore authentication to the registry. |
+| config.registries[0].secret.username | string | `nil` | OPTIONAL FOR <Opaque>: The username to use for this registry. Only necessary when the registry is requiring an advanced token flow for authentication, that involves trading in the username and api key / api token into a short-living OAuth2.0-esque access token. This is required for ghcr.io and docker.io |
 | config.tls | object | `{"caCertificatePaths":[]}` | TLS configuration |
 | config.tls.caCertificatePaths | list | `[]` | Custom CA certificate paths within the container |
 | config.webserver | object | `{"port":8080}` | Webserver configuration |

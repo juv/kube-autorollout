@@ -43,13 +43,13 @@ spec:
             - name: CONFIG_FILE
               {{- $configDirectory := "/opt/app/kube-autorollout/config" }}
               value: {{ $configDirectory }}/config.yaml
-          {{- range .Values.config.registries }}
-          {{- if .secret }}
-            - name: {{ .secret.key }}
+          {{- range $registry := .Values.config.registries }}
+          {{- if and $registry.secret (eq $registry.secret.type "Opaque") }}
+            - name: {{ $registry.secret.key }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ .secret.name }}
-                  key: {{ .secret.key }}
+                  name: {{ $registry.secret.name }}
+                  key: {{ $registry.secret.key }}
           {{- end }}
           {{- end }}
           ports:
@@ -71,10 +71,24 @@ spec:
           volumeMounts:
             - name: &configVolume config-volume
               mountPath: {{ $configDirectory }}
+            {{- range $i, $registry := .Values.config.registries }}
+            {{- if and $registry.secret (eq $registry.secret.type "ImagePullSecret") }}
+            - name: kube-autorollout-pull-secret-{{ $i }}
+              mountPath: {{ $registry.secret.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
       volumes:
         - name: *configVolume
           configMap:
             name: {{ include "kube-autorollout.fullname" . }}-config
+        {{- range $i, $registry := .Values.config.registries }}
+        {{- if and $registry.secret (eq $registry.secret.type "ImagePullSecret") }}
+        - name: kube-autorollout-pull-secret-{{ $i }}
+          secret:
+            secretName: {{ $registry.secret.name }}
+        {{- end }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

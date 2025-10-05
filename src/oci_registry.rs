@@ -4,7 +4,6 @@ use crate::image_reference::ImageReference;
 use crate::secret_string::SecretString;
 use anyhow::{Context, Result};
 use axum::http::{HeaderMap, StatusCode};
-use chrono::{TimeZone, Utc};
 use reqwest::header::{ACCEPT, AUTHORIZATION, WWW_AUTHENTICATE};
 use reqwest::{Certificate, Client, Response};
 use serde::Deserialize;

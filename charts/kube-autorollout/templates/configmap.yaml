@@ -6,14 +6,13 @@ metadata:
     {{- include "kube-autorollout.labels" . | nindent 4 }}
 data:
   config.yaml: |-
-    cronSchedule: {{ .Values.config.cronSchedule }}
+    cronSchedule: {{ .Values.config.cronSchedule | quote }}
     webserver:
       port: {{ .Values.config.webserver.port }}
     registries:
     {{- range .Values.config.registries }}
       - hostnamePattern: {{ required "Missing .hostnamePattern for registry" .hostnamePattern | quote }}
-      {{ required (printf "Missing .secret for registry with hostnamePattern %s" .hostnamePattern) .secret }}
-      {{- with .secret }}
+      {{- with required (printf "Missing .secret for registry with hostnamePattern %s" .hostnamePattern) .secret }}
         secret:
         {{- $secretType := .type }}
         {{- if not (or (eq $secretType "ImagePullSecret") (eq $secretType "Opaque") (eq $secretType "None")) }}

@@ -11,9 +11,6 @@ jobs:
   label:
     runs-on: ubuntu-latest
     steps:
-      - name: checkout
-        uses: actions/checkout@v2
-
       - name: Determine branch prefix
         id: prefix
         run: |

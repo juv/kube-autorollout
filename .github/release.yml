@@ -27,6 +27,6 @@ changelog:
         - chore
         - refactor
         - test
-    - title: Other Changes
+    - title: 🎉 Other Changes
       labels:
         - "*"

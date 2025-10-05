@@ -1,5 +1,8 @@
 name: "Auto-label pull requests by branch prefix"
 
+permissions:
+  issues: write
+
 on:
   pull_request:
     types: [opened, synchronize, reopened]

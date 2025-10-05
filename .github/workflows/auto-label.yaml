@@ -1,7 +1,7 @@
 name: "Auto-label pull requests by branch prefix"
 
 permissions:
-  issues: write
+  pull-requests: write
 
 on:
   pull_request:

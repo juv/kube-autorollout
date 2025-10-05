@@ -71,10 +71,8 @@ kube-autorollout is supposed to be installed using the [Helm chart](charts/kube-
 
 kube-autorollout is supposed to be installed in each Kubernetes namespace where you want to enable automated rollouts.
 
-```bash
-
-# todo
-```
+The Helm Chart is available on Artifact Hub:
+[![Artifact Hub](https://img.shields.io/endpoint?color=blue&url=https://artifacthub.io/badge/repository/kube-autorollout)](https://artifacthub.io/packages/search?repo=kube-autorollout)
 
 ### Configuration
 
@@ -125,22 +123,22 @@ featureFlags:
 kube-autorollout expects your Kubernetes secrets to be existing before installing the Helm chart.
 For a quick start, you can create the above-mentioned secret examples like this:
 
-JFrog Artifactory:
+JFrog Artifactory, secret type `Opaque`:
 
 ```
 kubectl create secret generic jfrog-artifactory-registry-creds --from-literal=IDENTITY_TOKEN=<jfrog-identity-token-here>
 ```
 
-GitHub personal access token:
+GitHub personal access token, secret type `ImagePullSecret`:
 
 ```
-kubectl create secret generic ghcr-io-registry-creds --from-literal=PERSONAL_ACCESS_TOKEN=<github-personal-access-token-here>
+kubectl create secret docker-registry ghcr-io-registry-creds --docker-server=https://ghcr.io --docker-username=<github-username-here> --docker-password=<github-personal-access-token-here>
 ```
 
-Docker personal access token:
+Docker personal access token, secret type `ImagePullSecret`:
 
 ```
-kubectl create secret generic docker-io-registry-creds --from-literal=PERSONAL_ACCESS_TOKEN=<docker-personal-access-token-here>
+kubectl create secret docker-registry docker-io-registry-creds --docker-server=https://docker.io --docker-username=<docker-io-username-here> --docker-password=<docker-io-personal-access-token-here>
 ```
 
 ### Select `Deployment` resources for auto-rollout

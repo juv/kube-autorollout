@@ -11,15 +11,32 @@ data:
       port: {{ .Values.config.webserver.port }}
     registries:
     {{- range .Values.config.registries }}
-      - hostnamePattern: {{ .hostnamePattern | quote }}
-        username: {{ .username | quote }}
-        {{- if .token }}
-        token: {{ .token | quote }}
-        {{- else if and .secret .secret.key }}
-        token: {{ printf "${%s}" .secret.key | quote }}
-        {{- else }}
-        {{ fail "registry must contain .token or .secret.key (the latter is preferred)" }}
-        {{ end }}
+      - hostnamePattern: {{ required "Missing .hostnamePattern for registry" .hostnamePattern | quote }}
+      {{ required (printf "Missing .secret for registry with hostnamePattern %s" .hostnamePattern) .secret }}
+      {{- with .secret }}
+        secret:
+        {{- $secretType := .type }}
+        {{- if not (or (eq $secretType "ImagePullSecret") (eq $secretType "Opaque") (eq $secretType "None")) }}
+          {{ fail (printf "Invalid input value for secret type: %s. Must be one of: ImagePullSecret, Opaque, None" $secretType) }}
+        {{- end }}
+        {{- if eq $secretType "ImagePullSecret" }}
+          type: ImagePullSecret
+          name: {{ required "A .name entry is required for secret type ImagePullSecret!" .name }}
+          mountPath: {{ required "A .mountPath entry is required for secret type ImagePullSecret!" .mountPath }}
+        {{- else if eq $secretType "Opaque" }}
+          type: Opaque
+          username: {{ .username }}
+          {{- if .token }}
+          token: {{ .token | quote }}
+          {{- else if .key }}
+          token: {{ printf "${%s}" .key | quote }}
+          {{- else }}
+          {{ fail "registry secret must contain .token or .key (the latter is preferred)" }}
+          {{ end }}
+        {{- else if eq $secretType "None" }}
+          type: None
+        {{- end }}
+      {{- end }}
     {{- end }}
     tls:
       caCertificatePaths:

@@ -76,7 +76,7 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
 
                 let updated_digest = fetch_digest_from_tag(
                     &reference.image_reference,
-                    registry_config.token.expose_secret(),
+                    &registry_config.secret,
                     &ctx.http_client,
                     ctx.config.feature_flags.enable_jfrog_artifactory_fallback,
                 )

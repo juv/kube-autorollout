@@ -1,0 +1,39 @@
+name: "Auto-label pull requests by branch prefix"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine branch prefix
+        id: prefix
+        run: |
+          # Extract prefix before first slash
+          branch=${{ github.head_ref }}
+          prefix="${branch%%/*}"
+          echo "prefix=$prefix" >> $GITHUB_OUTPUT
+
+      - name: Set label map
+        id: labels
+        run: |
+          # Define mapping of prefixes to labels
+          declare -A map
+          map[feature]="enhancement"
+          map[bugfix]="bug"
+          map[hotfix]="patch"
+          map[docs]="documentation"
+          map[chore]="chore"
+
+          prefix="${{ steps.prefix.outputs.prefix }}"
+          label=${map[$prefix]:-none}
+          echo "label=$label" >> $GITHUB_OUTPUT
+
+      - name: Add label to PR
+        if: steps.labels.outputs.label != 'none'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: ${{ steps.labels.outputs.label }}

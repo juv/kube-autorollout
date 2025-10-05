@@ -31,7 +31,7 @@ When to use kube-autorollout?
 
 ## tl;dr
 
-1) Install kube-autorollout using the Helm chart, configure container registries
+1) Install kube-autorollout using the Helm chart, [configure container registries](#Configuration)
 2) Target `Deployment` resources for auto-rollouts by adding the label `kube-autorollout/enabled=true`
 3) Push images to your container registry with the same **static** tag, e.g. `latest`, `main`, `nightly`
 4) ???
@@ -40,7 +40,7 @@ When to use kube-autorollout?
 ## Key Features
 
 - **Digest-based updates**: Monitors container [image digests](https://docs.docker.com/dhi/core-concepts/digests/)
-  rather than semver tags by using the manifests endpoint of
+  rather than SemVer tags by using the manifests endpoint of
   the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md), which can
   be seen as a more vendor-neutral, interoperable standard of
   the [Docker Registry HTTP API v2](https://github.com/distribution/distribution/blob/5cb406d511b7b9163bff9b6439072e4892e5ae3b/docs/spec/api.md)
@@ -57,11 +57,11 @@ When to use kube-autorollout?
 - **Cron-based scheduling**: Configurable scheduling of the main controller loop with cron expressions
 - **Custom CA certificates**: Support for custom certificate authority certificates for secure TLS connections to
   private registries
-- **Lightweight**: Low container image size, low memory and cpu footprint
+- **Lightweight**: Low container image size (~9 MB), low memory and cpu footprint
 
 ## How does it work?
 
-todo: add diagram, description
+//todo: add diagram, description
 
 ## Installation
 
@@ -78,44 +78,47 @@ kube-autorollout is supposed to be installed in each Kubernetes namespace where 
 
 ### Configuration
 
-Create a Helm values file that covers all registries for your deployments that are labeled with
-`kube-autorollout/enabled=true`.
+Create a Helm values file/override that covers all registries for your deployments that are labeled with
+`kube-autorollout/enabled=true`. For some quick examples, see the snippet below.
 
 For full field reference, see the [Helm chart](charts/kube-autorollout) README.
 
 ```yaml
-webserver:
-  port: 8080
-
 registries:
-  #JFrog Artifactory registry with "subdomain method for docker" https://jfrog.com/help/r/jfrog-artifactory-documentation/the-subdomain-method-for-docker
+  # -- GitHub container registry with ImagePullSecret
+  - hostnamePattern: "ghcr.io"
+    secret:
+      # -- REQUIRED: The type of the secret - ImagePullSecret, Opaque, None. <ImagePullSecret> must define keys "name" and "mountPath". <Opaque> with Kubernetes Secret must define keys "name" and "key", optionally "username". <Opaque> with hardcoded token must define keys "token". <None> will ignore authentication to the registry.
+      type: ImagePullSecret
+      # -- ImagePullSecret secret name to reference that contains the ghcr.io docker config
+      name: ghcr-io-registry-creds
+      # -- REQUIRED FOR <ImagePullSecret>: The mount path of the ImagePullSecret within the kube-autorollout pod. Must be unique across registry secrets.
+      mountPath: /etc/secrets/registries/ghcr.io
+
+  # -- DockerHub registry with ImagePullSecret, covers both docker.io and registry-1.docker.io
+  - hostnamePattern: "docker.io"
+    secret:
+      type: ImagePullSecret
+      name: docker-io-registry-creds
+      mountPath: /etc/secrets/registries/docker.io
+
+  # -- Wildcard-match for JFrog Artifactory registry with "subdomain method for docker" https://jfrog.com/help/r/jfrog-artifactory-documentation/the-subdomain-method-for-docker
   - hostnamePattern: "*.artifactory.example.com"
     secret:
-      # -- Kubernetes Secret name to reference that contains the Docker Registry API token
-      name: kube-autorollout-jfrog-api-token
-      # -- The key to reference in the secret, will be referenced in the config automatically if .token is unset
+      type: Opaque
+      # -- Kubernetes Secret name of secret type Opaque to reference. The secret should contain the Docker Registry API token, personal access token, JFrog Artifactory identity token, etc.
+      name: jfrog-artifactory-registry-creds
+      # -- OPTIONAL FOR <Opaque>: The key to reference of the secret. Will be referenced in the config automatically if .token is unset
       key: IDENTITY_TOKEN
 
-  #JFrog Artifactory registry with "repository path method for docker" https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker
+  # -- JFrog Artifactory registry with "repository path method for docker" https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker
   - hostnamePattern: "another-artifactory.example.com"
     secret:
-      name: kube-autorollout-jfrog-api-token
+      name: jfrog-artifactory-registry-creds
       key: IDENTITY_TOKEN
 
-  - hostnamePattern: "ghcr.io"
-    username: "github-username-123"
-    secret:
-      name: kube-autorollout-github-pat
-      key: PERSONAL_ACCESS_TOKEN
-
-  - hostnamePattern: "docker.io"
-    username: "docker-username-12345"
-    secret:
-      name: kube-autorollout-docker-io-pat
-      key: PERSONAL_ACCESS_TOKEN
-
 featureFlags:
-  #Enables an automated fallback for Artifactory's "repository path method for docker" setup
+  # -- Enables an automated fallback for Artifactory's "repository path method for docker" setup
   enableJfrogArtifactoryFallback: true
 ```
 
@@ -125,19 +128,19 @@ For a quick start, you can create the above-mentioned secret examples like this:
 JFrog Artifactory:
 
 ```
-kubectl create secret generic kube-autorollout-jfrog-api-token --from-literal=IDENTITY_TOKEN=<jfrog-identity-token-here>
+kubectl create secret generic jfrog-artifactory-registry-creds --from-literal=IDENTITY_TOKEN=<jfrog-identity-token-here>
 ```
 
 GitHub personal access token:
 
 ```
-kubectl create secret generic kube-autorollout-github-pat --from-literal=PERSONAL_ACCESS_TOKEN=<github-personal-access-token-here>
+kubectl create secret generic ghcr-io-registry-creds --from-literal=PERSONAL_ACCESS_TOKEN=<github-personal-access-token-here>
 ```
 
 Docker personal access token:
 
 ```
-kubectl create secret generic kube-autorollout-docker-io-pat --from-literal=PERSONAL_ACCESS_TOKEN=<docker-personal-access-token-here>
+kubectl create secret generic docker-io-registry-creds --from-literal=PERSONAL_ACCESS_TOKEN=<docker-personal-access-token-here>
 ```
 
 ### Select `Deployment` resources for auto-rollout
@@ -146,7 +149,11 @@ After configuring your registry credentials, add the **label** `kube-autorollout
 deployments.
 That's it. Your pods can have any number of containers. Your image tag can be any static tag, it does not necessarily be
 `latest`.
-Example:
+
+kube-autorollout will print warnings into the log for containers that do not set `imagePullPolicy: Always`. Make sure
+you set that imagePullPolicy, otherwise the updated
+image [will not be downloaded](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) by the kubelet
+upon next pod creation. Example:
 
 ```yaml
 apiVersion: apps/v1
@@ -163,17 +170,31 @@ spec:
       containers:
         - name: my-app
           image: ghcr.io/myorg/my-app:latest
+          imagePullPolicy: Always
           # ...
-        - name: another-app
-          image: ghcr.io/another-org/another-app:main
+        - name: another-container
+          image: ghcr.io/another-org/whatever:main
+          imagePullPolicy: Always
 ```
 
-### Environment Variables
+### GitOps state drift detection support (ArgoCD and FluxCD compatibility)
 
-- `CONFIG_FILE`: The Helm chart automatically configures the required `CONFIG_FILE` environment variable automatically
-  and mounts the config file into the kube-autorollout pod
-- Registry secrets are mounted as pod environment variables and referenced in the application config using
-  `${ENV_VAR_NAME}` syntax automatically
+To ensure compatibility to the state drift detection in GitOps tools like ArgoCD and FluxCD, enable the feature flag
+`enableKubectlAnnotation` in your Helm Chart values file:
+
+```yaml
+#...
+featureFlags:
+  #...
+  enableKubectlAnnotation: true
+```
+
+This changes the kube-autorollout patch `annotation` key (that internally triggers the redeployment of the pods) from
+`kube-autorollout/restartedAt` to `kubectl.kubernetes.io/restartedAt`.
+The latter annotation is applied by `kubectl` when executing the command `kubectl rollout restart`.
+Most GitOps tools like ArgoCD and FluxCD ignore the kubectl annotation from state drift detection. If you are not using
+this value on "true" you might need to add further configuration to ArgoCD and FluxCD to not show the kube-autorollout
+annotation as a state drift.
 
 ## Supported container registries
 
@@ -194,6 +215,10 @@ thank you :-).
 - Store sensitive tokens in Kubernetes secrets rather than plain text in the Helm chart values
 - Use least-privilege api tokens for registry authentication
 - Regularly rotate your api tokens
+- Make sure to cover the secrets used in the kube-autorollout configuration as part of your "token rotation" process.
+  These secrets might go unnoticed after a while and use expired api tokens, potentially causing locked user accounts.
+  This is especially the case for self-hosted JFrog Artifactory registries, where a handful of forbidden requests lock
+  the entire user account until manual intervention of an admin.
 
 ## Metrics
 
@@ -223,3 +248,74 @@ This project is licensed under the Apache License 2.0 - see [LICENSE](LICENSE).
 
 - Report bugs and feature requests in [GitHub issues](https://github.com/juv/kube-autorollout/issues)
 - Ask questions in the [GitHub discussions](https://github.com/juv/kube-autorollout/discussions)
+
+## Development
+
+### Building from source
+
+```bash
+# Clone the repository
+git clone https://github.com/juv/kube-autorollout.git
+cd kube-autorollout
+
+# Build the binary
+cargo build --release
+
+# Build Docker image
+docker build -t kube-autorollout:latest .
+```
+
+### Running tests
+
+```bash
+# Run tests
+cargo test
+```
+
+### Executing locally
+
+To execute kube-autorollout locally, set these environment variables:
+
+- `CONFIG_FILE`: Required -- the file path to the config file. Minimal config:
+
+```yaml 
+cronSchedule: "*/45 * * * * *"
+webserver:
+  port: 8080
+registries:
+  - hostnamePattern: "docker.io"
+    secret:
+      type: ImagePullSecret
+      mountPath: "C:/Users/<YourUser>/Desktop/kube-autorollout/docker-io"
+  - hostnamePattern: "*.artifactory.example.com"
+    secret:
+      type: Opaque
+      token: ${REGISTRY_TOKEN}
+  - hostnamePattern: "ghcr.io"
+    secret:
+      type: ImagePullSecret
+      mountPath: "C:/Users/<YourUser>/Desktop/kube-autorollout/ghcr-io"
+tls:
+  caCertificatePaths: [ ]
+featureFlags:
+  enableJfrogArtifactoryFallback: false
+  enableKubectlAnnotation: false
+```
+
+- Registry secrets of type `Opaque` should be present as environment variables and referenced in the application config
+  using `${ENV_VAR_NAME}` syntax
+- Registry secrets of type `ImagePullSecret` must include a `mountPath` that points to an existing folder, which
+  includes a file `.dockerconfigjson` with a content like this:
+
+```json
+{
+  "auths": {
+    "your.private.registry.example.com": {
+      "username": "janedoe",
+      "password": "xxxxxxxxxxx",
+      "email": "jdoe@example.com",
+      "auth": "c3R...zE2"
+    }
+  }
+}
+```

@@ -2,6 +2,13 @@
 name = "kube-autorollout"
 version = "0.2.0"
 edition = "2024"
+authors = ["juv"]
+description = "A lightweight Kubernetes controller that automatically triggers Kubernetes deployment rollouts when container image digests change, ensuring your applications stay up-to-date without manual intervention 🚀"
+license = "Apache-2.0"
+repository = "https://github.com/juv/kube-autorollout"
+homepage = "https://github.com/juv/kube-autorollout"
+keywords = ["kubernetes", "docker", "devops", "gitops", "container"]
+readme = "README.md"
 
 [profile.release]
 opt-level = 3          # https://doc.rust-lang.org/cargo/reference/profiles.html#opt-level

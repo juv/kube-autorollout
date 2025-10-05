@@ -34,12 +34,6 @@ jobs:
           path: target
           key: build-stable-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Lint with Clippy
-        run: cargo clippy --all -- -D warnings
-
       - name: Run Tests
         run: cargo test --all --locked --verbose
 

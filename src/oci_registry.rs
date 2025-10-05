@@ -48,9 +48,8 @@ pub async fn fetch_digest_from_tag(
 
     match response.status() {
         StatusCode::OK => {
-            if let Ok(digest) = get_digest_from_response(&response) {
-                return Ok(digest);
-            }
+            let digest = get_digest_from_response(&response)?;
+            return Ok(digest);
         }
 
         StatusCode::UNAUTHORIZED => {
@@ -128,9 +127,8 @@ pub async fn fetch_digest_from_tag(
                             .await
                             .with_context(|| format!("Failed to fetch manifest from {}", url))?;
 
-                        if let Ok(digest) = get_digest_from_response(&response) {
-                            return Ok(digest);
-                        }
+                        let digest = get_digest_from_response(&response)?;
+                        return Ok(digest);
                     }
 
                     status => {
@@ -159,13 +157,8 @@ pub async fn fetch_digest_from_tag(
                             fallback_url
                         ))?;
 
-                    let digest = get_digest_from_response(&response).context("Failed to re")?;
+                    let digest = get_digest_from_response(&response)?;
                     return Ok(digest);
-                } else {
-                    anyhow::bail!(
-                        "Artifactory fallback is enabled but no Artifactory indicators were found in response headers from {}",
-                        registry
-                    );
                 }
             }
         }
@@ -174,7 +167,7 @@ pub async fn fetch_digest_from_tag(
             anyhow::bail!(
                 "Registry {} returned error status {} while fetching OCI image manifest",
                 image_reference.registry,
-                response.status()
+                status
             );
         }
     }
@@ -245,17 +238,9 @@ fn get_authorization_header(registry_secret: &RegistrySecret) -> String {
     match registry_secret {
         Opaque { token, .. } => format!("Bearer {}", token.expose_secret()),
         ImagePullSecret { docker_config, .. } => {
-            format!(
-                "Basic {}",
-                docker_config
-                    .auths
-                    .iter()
-                    .next()
-                    .unwrap()
-                    .1
-                    .auth
-                    .expose_secret()
-            )
+            let first_docker_config = docker_config.auths.iter().next().unwrap();
+            let docker_secret = &first_docker_config.1.auth;
+            format!("Basic {}", docker_secret.expose_secret())
         }
         RegistrySecret::None => String::new(),
     }

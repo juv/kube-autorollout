@@ -1,6 +1,6 @@
 [package]
 name = "kube-autorollout"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 authors = ["juv"]
 description = "A lightweight Kubernetes controller that automatically triggers Kubernetes deployment rollouts when container image digests change, ensuring your applications stay up-to-date without manual intervention 🚀"

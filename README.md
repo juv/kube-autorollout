@@ -234,6 +234,30 @@ can create the above-mentioned secret example like this:
 kubectl create secret generic custom-ca-01-secret --from-file=ca-01.crt={path/to/ca-01.crt}
 ```
 
+### RBAC
+
+kube-autorollout requires permissions to query the Kubernetes API server to do its job. The Helm Chart will create a
+least-privilege `Role`, `RoleBinding` and `ServiceAccount` to run the application with per default.
+
+More specifically, the application requires `get`/`list`/`patch` permissions for `deployments`, `statefulsets` and
+`daemonsets`. On top of that, `get` and `list` permissions are required for `pods`.
+The `patch` permission is required to patch the resource's rollout annotation in field
+`.spec.template.metadata.annotations`. That is key `kube-autorollout/restartedAt` or
+`kubectl.kubernetes.io/restartedAt` depending on your config. In case you do _not_ want to use the default that comes
+with the Helm Chart (enabled by default in the values.yaml), make sure to grant proper rolebinding to the service
+account that you use to run kube-autorollout with. Set `rbac.enabled` to `false` in your values file to disable the
+default RBAC configuration. See [role.yaml](charts/kube-autorollout/templates/role.yaml) for reference.
+
+```yaml
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "get", "list" ]
+  - apiGroups: [ "apps" ]
+    resources: [ "deployments", "statefulsets", "daemonsets" ]
+    verbs: [ "get", "list", "patch" ]
+```
+
 ## Supported container registries
 
 - **Docker Hub** (`docker.io` / `registry-1.docker.io`) - Requires username and personal access token

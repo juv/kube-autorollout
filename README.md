@@ -15,26 +15,27 @@ _digests_ change, ensuring your applications stay up-to-date without manual inte
 kube-autorollout monitors Kubernetes deployments and automatically triggers rollouts when new container image versions
 are available. Unlike other image update mechanisms that require changing tags via semver version bump, this tool
 is built to compare container [image digests](https://docs.docker.com/dhi/core-concepts/digests/) (`@sha256:...`) for
-the same, static tag.
+static / mutable tags (e.g., `latest`, `main`, `nightly`).
 
 When to use kube-autorollout?
 
-- Deploying your application's frequently changing, static tag like `latest`, `main`, `nightly`, etc. and you want
-  your up-to-date baseline being executed in the Kubernetes cluster. Particularly suited for development environments.
+- Use kube-autorollout when deploying static / mutable image tags like `latest`, `main`, `nightly`, etc. to ensure
+  your up-to-date baseline is being executed in the Kubernetes cluster. Particularly suited for _development
+  environments_.
 - CI/CD pipelines are less complex and stay declarative. No imperative tasks, no fake Helm chart version bumps, no
   additional git commits in your pipelines to trigger rollouts
-- Immediate feedback loop in combination with your existing Prometheus alerts, e.g. "pod is stuck in a crash loop" or "
-  ArgoCD application going into degraded health state"
-- ArgoCD Image Updater only supports ArgoCD applications but your development environments contains both ArgoCD
+- ArgoCD Image Updater only supports ArgoCD Applications but your development environments contains both ArgoCD
   applications as well as manually installed Helm chart releases, for which you want automated rollouts.
   kube-autorollout will automate rollouts for the supported Kubernetes resources, no matter which tool installed
   them in the first place.
+- Immediate feedback loop in combination with your existing Prometheus alerts, e.g., "pod is stuck in a crash loop" or "
+  ArgoCD application going into degraded health state"
 
 ## tl;dr
 
 1) Install kube-autorollout using the Helm chart, [configure container registries](#Configuration)
 2) Target `Deployment` resources for auto-rollouts by adding the label `kube-autorollout/enabled=true`
-3) Push images to your container registry with the same **static** tag, e.g. `latest`, `main`, `nightly`
+3) Push images to your container registry with the same **static** tag, e.g., `latest`, `main`, `nightly`
 4) ???
 5) Profit
 
@@ -46,10 +47,10 @@ When to use kube-autorollout?
   be seen as a more vendor-neutral, interoperable standard of
   the [Docker Registry HTTP API v2](https://github.com/distribution/distribution/blob/5cb406d511b7b9163bff9b6439072e4892e5ae3b/docs/spec/api.md)
 - **Label-based selection**: Uses Kubernetes labels to selectively monitor deployments
-- **Multiple OCI registry support**: Supports multiple container registries in a single instance of kube-autorollout.
+- **GitOps compatiblity**: Compatible to GitOps tools like ArgoCD and FluxCD
+- **OCI registry support**: Supports multiple container registries in a single instance of kube-autorollout.
   Including Docker Hub (docker.io, registry-1.docker.io), GitHub Container Registry (ghcr.io), JFrog Artifactory, and
   custom registries as long as they implement the OCI Distribution Specification
-- **GitOps compatiblity**: Compatible to GitOps tools like ArgoCD and FluxCD
 - **JFrog Artifactory compatiblity**: Special handling for JFrog Artifactory
   with a configuration of
   the [repository path method for docker](https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
@@ -244,8 +245,11 @@ the [OCI Distribution Specification](https://github.com/opencontainers/distribut
 create a pull request to this README.md file to let other users know that a certain registry is supported -
 thank you :-).
 
-## Security considerations
+## Deployment / security considerations
 
+- Continue using SemVer tags for _production environments_. If you choose to use kube-autorollout in those environments,
+  do so with special caution to avoid accidentally breaking your applications. Especially when using kube-autorollout
+  for components that are not maintained by your team. kube-autorollout is best suited for _development environments_.
 - Store sensitive tokens in Kubernetes secrets rather than plain text in the Helm chart values
 - Use least-privilege api tokens for registry authentication
 - Regularly rotate your api tokens

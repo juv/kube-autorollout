@@ -24,14 +24,24 @@ config:
         mountPath:
         # -- OPTIONAL FOR <Opaque>: The key to reference of the secret. Will be referenced in the config automatically if .token is unset
         key:
-        # -- OPTIONAL FOR <Opaque>: The username to use for this registry. Only necessary when the registry is requiring an advanced token flow for authentication, that involves trading in the username and api key / api token into a short-living OAuth2.0-esque access token. This is required for ghcr.io and docker.io
+        # -- OPTIONAL FOR <Opaque>: The username to use for this registry. Only required when the registry is requiring an advanced token flow for authentication, that involves trading in the username and api key / api token into a short-living OAuth2.0-esque access token. This is required for ghcr.io and docker.io
         username:
         # -- OPTIONAL FOR <Opaque>: Not recommended for production use - use .name and .key instead. A hardcoded token (api token, personal access token, etc.) to be passed in the Authorization header of the Docker manifest request to the registry
         token:
   # -- TLS configuration
   tls:
-    # -- Custom CA certificate paths within the container
-    caCertificatePaths: []
+    # -- Custom CA certificates to use within kube-autorollout for verifying TLS connections to registries which present a certificate signed by a non-public CA
+    customCaCertificates:
+      # -- Enable or disable the custom CA certificates configuration. Only required if you connect to registries that present a TLS certificate signed by a non-public CA
+      enabled: false
+      secrets:
+        - # -- The name of the secret to reference that includes the custom CA certificate chain
+          name:
+          # -- The key / subPath within the secret to mount in kube-autorollout
+          subPath:
+          # -- The mountPath within kube-autoroll, will be auto-wired in the config
+          mountPath:
+
   featureFlags:
     # -- Enable JFrog Artifactory fallback when the Artifactory is configured to use the Repository Path Method (https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
     enableJfrogArtifactoryFallback: false

@@ -1,6 +1,6 @@
 # kube-autorollout
 
-![Version: 0.3.0](https://img.shields.io/badge/Version-0.3.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.0](https://img.shields.io/badge/AppVersion-0.2.0-informational?style=flat-square)
+![Version: 0.4.0](https://img.shields.io/badge/Version-0.4.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.0](https://img.shields.io/badge/AppVersion-0.2.0-informational?style=flat-square)
 
 A Helm chart for kube-autorollout
 
@@ -19,9 +19,13 @@ A Helm chart for kube-autorollout
 | config.registries[0].secret.name | string | `nil` | Kubernetes Secret name of secret type Opaque or ImagePullSecret to reference. The secret should contain the Docker Registry API token, personal access token, JFrog Artifactory identity token, etc. |
 | config.registries[0].secret.token | string | `nil` | OPTIONAL FOR <Opaque>: Not recommended for production use - use .name and .key instead. A hardcoded token (api token, personal access token, etc.) to be passed in the Authorization header of the Docker manifest request to the registry |
 | config.registries[0].secret.type | string | `"None"` | REQUIRED: The type of the secret - ImagePullSecret, Opaque, None. <ImagePullSecret> must define keys "name" and "mountPath". <Opaque> with Kubernetes Secret must define keys "name" and "key", optionally "username". <Opaque> with hardcoded token must define keys "token". <None> will ignore authentication to the registry. |
-| config.registries[0].secret.username | string | `nil` | OPTIONAL FOR <Opaque>: The username to use for this registry. Only necessary when the registry is requiring an advanced token flow for authentication, that involves trading in the username and api key / api token into a short-living OAuth2.0-esque access token. This is required for ghcr.io and docker.io |
-| config.tls | object | `{"caCertificatePaths":[]}` | TLS configuration |
-| config.tls.caCertificatePaths | list | `[]` | Custom CA certificate paths within the container |
+| config.registries[0].secret.username | string | `nil` | OPTIONAL FOR <Opaque>: The username to use for this registry. Only required when the registry is requiring an advanced token flow for authentication, that involves trading in the username and api key / api token into a short-living OAuth2.0-esque access token. This is required for ghcr.io and docker.io |
+| config.tls | object | `{"customCaCertificates":{"enabled":false,"secrets":[{"mountPath":null,"name":null,"subPath":null}]}}` | TLS configuration |
+| config.tls.customCaCertificates | object | `{"enabled":false,"secrets":[{"mountPath":null,"name":null,"subPath":null}]}` | Custom CA certificates to use within kube-autorollout for verifying TLS connections to registries which present a certificate signed by a non-public CA |
+| config.tls.customCaCertificates.enabled | bool | `false` | Enable or disable the custom CA certificates configuration. Only required if you connect to registries that present a TLS certificate signed by a non-public CA |
+| config.tls.customCaCertificates.secrets[0].mountPath | string | `nil` | The mountPath within kube-autoroll, will be auto-wired in the config |
+| config.tls.customCaCertificates.secrets[0].name | string | `nil` | The name of the secret to reference that includes the custom CA certificate chain |
+| config.tls.customCaCertificates.secrets[0].subPath | string | `nil` | The key / subPath within the secret to mount in kube-autorollout |
 | config.webserver | object | `{"port":8080}` | Webserver configuration |
 | config.webserver.port | int | `8080` | Webserver port |
 | fullnameOverride | string | `""` | String to fully override `"kube-autorollout.fullname"` |

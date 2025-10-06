@@ -78,6 +78,14 @@ spec:
               readOnly: true
             {{- end }}
             {{- end }}
+            {{- if .Values.config.tls.customCaCertificates.enabled }}
+            {{- range $i, $customCaCertificateSecret := .Values.config.tls.customCaCertificates.secrets }}
+            - name: kube-autorollout-ca-cert-{{ $i }}
+              mountPath: {{ required "Secret mountPath is empty for custom CA certificate" $customCaCertificateSecret.mountPath }}
+              subPath: {{ required "Secret subPath is empty for custom CA certificate" $customCaCertificateSecret.subPath }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
       volumes:
         - name: *configVolume
           configMap:
@@ -87,6 +95,13 @@ spec:
         - name: kube-autorollout-pull-secret-{{ $i }}
           secret:
             secretName: {{ $registry.secret.name }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.config.tls.customCaCertificates.enabled }}
+        {{- range $i, $customCaCertificateSecret := .Values.config.tls.customCaCertificates.secrets }}
+        - name: kube-autorollout-ca-cert-{{ $i }}
+          secret:
+            secretName: {{ required "Secret name is empty for custom CA certificate" $customCaCertificateSecret.name }}
         {{- end }}
         {{- end }}
       {{- with .Values.nodeSelector }}

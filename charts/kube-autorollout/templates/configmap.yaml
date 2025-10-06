@@ -39,9 +39,9 @@ data:
     {{- end }}
     tls:
       caCertificatePaths:
-      {{- if .Values.config.tls.caCertificatePaths }}
-      {{- range .Values.config.tls.caCertificatePaths }}
-        - {{ . }}
+      {{- if .Values.config.tls.customCaCertificates.enabled }}
+      {{- range .Values.config.tls.customCaCertificates.secrets }}
+        - {{ .mountPath }}
       {{- end }}
       {{- else }}
         []

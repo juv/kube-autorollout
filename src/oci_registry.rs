@@ -31,6 +31,10 @@ pub fn create_client(config: &Config) -> Result<Client> {
         ))?;
         let cert = Certificate::from_pem(&file_content).context("Failed to parse certificate")?;
         client_builder = client_builder.add_root_certificate(cert);
+        info!(
+            "Adding ca certificate(s) given in file {} to truststore",
+            file_path.to_str().unwrap()
+        );
     }
 
     Ok(client_builder

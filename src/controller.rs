@@ -4,7 +4,7 @@ use crate::state::{ContainerImageReference, ControllerContext};
 use anyhow::Context;
 use chrono::Utc;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
-use k8s_openapi::api::core::v1::{ContainerStatus, Pod};
+use k8s_openapi::api::core::v1::{ContainerStatus, Pod, PodSpec};
 use k8s_openapi::NamespaceResourceScope;
 use kube::api::{ListParams, Patch, PatchParams};
 use kube::{Api, Client, Resource, ResourceExt};
@@ -37,6 +37,13 @@ where
     fn selector(&self) -> BTreeMap<String, String>;
     fn desired_replicas(&self) -> i32;
     fn actual_replicas(&self) -> i32;
+    fn pod_spec(&self) -> Option<&PodSpec>;
+
+    fn image_pull_secrets(&self) -> Option<Vec<String>> {
+        self.pod_spec()
+            .and_then(|ps| ps.image_pull_secrets.as_ref())
+            .map(|secrets| secrets.iter().map(|s| s.name.clone()).collect())
+    }
 
     async fn patch_rollout_annotation(
         api: &Api<Self>,
@@ -98,6 +105,10 @@ impl AutoRolloutResource for Deployment {
     fn actual_replicas(&self) -> i32 {
         self.status.as_ref().unwrap().replicas.unwrap_or(0)
     }
+
+    fn pod_spec(&self) -> Option<&PodSpec> {
+        self.spec.as_ref().and_then(|s| s.template.spec.as_ref())
+    }
 }
 
 impl AutoRolloutResource for StatefulSet {
@@ -119,6 +130,10 @@ impl AutoRolloutResource for StatefulSet {
     fn actual_replicas(&self) -> i32 {
         self.status.as_ref().unwrap().replicas
     }
+
+    fn pod_spec(&self) -> Option<&PodSpec> {
+        self.spec.as_ref().and_then(|s| s.template.spec.as_ref())
+    }
 }
 
 impl AutoRolloutResource for DaemonSet {
@@ -139,6 +154,10 @@ impl AutoRolloutResource for DaemonSet {
 
     fn actual_replicas(&self) -> i32 {
         self.status.as_ref().unwrap().number_ready
+    }
+
+    fn pod_spec(&self) -> Option<&PodSpec> {
+        self.spec.as_ref().and_then(|s| s.template.spec.as_ref())
     }
 }
 
@@ -195,6 +214,9 @@ where
         info!("Found {} resource with label: {}", kind_name, resource_name);
         let desired_replicas = resource.desired_replicas();
         let actual_replicas = resource.actual_replicas();
+        let image_pull_secrets = resource.image_pull_secrets();
+        info!("Parsed image pull secrets: {:?}", image_pull_secrets);
+
         if desired_replicas > 0 && actual_replicas > 0 {
             let selector = resource.selector();
             let pod = get_associated_pod(&pods, &selector).await?;

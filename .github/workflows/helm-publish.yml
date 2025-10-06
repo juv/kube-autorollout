@@ -19,13 +19,10 @@ jobs:
         with:
           fetch-depth: 0  # fetch full history for diff
 
-      - name: Fetch base branch
-        run: git fetch origin ${{ github.event.pull_request.base.ref }}
-
       - name: Check for changes in Helm chart directory
         id: chart_changed
         run: |
-          if git diff --quiet origin/${{ github.event.pull_request.base.ref }} -- ./charts/kube-autorollout; then
+          if git diff --quiet HEAD^ -- ./charts/kube-autorollout; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -36,7 +33,7 @@ jobs:
         uses: azure/setup-helm@v3
 
       - name: Log into registry ${{ env.REGISTRY }}
-        if: github.event_name != 'pull_request'
+        if: steps.chart_changed.outputs.changed == 'true'
         uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
         with:
           registry: ${{ env.REGISTRY }}

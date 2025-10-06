@@ -31,7 +31,7 @@ where
         + DeserializeOwned
         + 'static,
 {
-    fn get_kind_name() -> &'static str {
+    fn kind_name() -> &'static str {
         std::any::type_name::<Self>().split("::").last().unwrap()
     }
     fn selector(&self) -> BTreeMap<String, String>;
@@ -43,7 +43,7 @@ where
         resource_name: &str,
         enable_kubectl_annotation: bool,
     ) -> anyhow::Result<()> {
-        let k8s_resource_kind = Self::get_kind_name();
+        let k8s_resource_kind = Self::kind_name();
 
         let annotation = match enable_kubectl_annotation {
             true => KUBECTL_ROLLOUT_ANNOTATION,
@@ -175,7 +175,7 @@ async fn reconcile<T>(ctx: Arc<ControllerContext>) -> anyhow::Result<()>
 where
     T: AutoRolloutResource,
 {
-    let kind_name = T::get_kind_name();
+    let kind_name = T::kind_name();
     let api: Api<T> = Api::default_namespaced(ctx.kube_client.clone());
     let pods: Api<Pod> = Api::default_namespaced(ctx.kube_client.clone());
     let lp = ListParams::default().labels(KUBE_AUTOROLLOUT_LABEL);

@@ -21,7 +21,7 @@ static KUBE_AUTOROLLOUT_ANNOTATION: &str = "kube-autorollout/restartedAt";
 static KUBE_AUTOROLLOUT_FIELD_MANAGER: &str = "kube-autorollout";
 static KUBECTL_ROLLOUT_ANNOTATION: &str = "kubectl.kubernetes.io/restartedAt";
 
-trait ResourceController
+trait AutoRolloutResource
 where
     Self: Resource<DynamicType = (), Scope = NamespaceResourceScope>
         + Clone
@@ -79,7 +79,7 @@ where
     }
 }
 
-impl ResourceController for Deployment {
+impl AutoRolloutResource for Deployment {
     fn selector(&self) -> BTreeMap<String, String> {
         self.spec
             .as_ref()
@@ -100,7 +100,7 @@ impl ResourceController for Deployment {
     }
 }
 
-impl ResourceController for StatefulSet {
+impl AutoRolloutResource for StatefulSet {
     fn selector(&self) -> BTreeMap<String, String> {
         self.spec
             .as_ref()
@@ -121,7 +121,7 @@ impl ResourceController for StatefulSet {
     }
 }
 
-impl ResourceController for DaemonSet {
+impl AutoRolloutResource for DaemonSet {
     fn selector(&self) -> BTreeMap<String, String> {
         self.spec
             .as_ref()
@@ -173,7 +173,7 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
 
 async fn reconcile<T>(ctx: Arc<ControllerContext>) -> anyhow::Result<()>
 where
-    T: ResourceController,
+    T: AutoRolloutResource,
 {
     let kind_name = T::get_kind_name();
     let api: Api<T> = Api::default_namespaced(ctx.kube_client.clone());

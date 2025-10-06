@@ -83,42 +83,43 @@ Create a Helm values file/override that covers all registries for your deploymen
 For full field reference, see the [Helm chart](charts/kube-autorollout) README.
 
 ```yaml
-registries:
-  # -- GitHub container registry with ImagePullSecret
-  - hostnamePattern: "ghcr.io"
-    secret:
-      # -- REQUIRED: The type of the secret - ImagePullSecret, Opaque, None. <ImagePullSecret> must define keys "name" and "mountPath". <Opaque> with Kubernetes Secret must define keys "name" and "key", optionally "username". <Opaque> with hardcoded token must define keys "token". <None> will ignore authentication to the registry.
-      type: ImagePullSecret
-      # -- ImagePullSecret secret name to reference that contains the ghcr.io docker config
-      name: ghcr-io-registry-creds
-      # -- REQUIRED FOR <ImagePullSecret>: The mount path of the ImagePullSecret within the kube-autorollout pod. Must be unique across registry secrets.
-      mountPath: /etc/secrets/registries/ghcr.io
+config:
+  registries:
+    # -- GitHub container registry with ImagePullSecret
+    - hostnamePattern: "ghcr.io"
+      secret:
+        # -- REQUIRED: The type of the secret - ImagePullSecret, Opaque, None. <ImagePullSecret> must define keys "name" and "mountPath". <Opaque> with Kubernetes Secret must define keys "name" and "key", optionally "username". <Opaque> with hardcoded token must define keys "token". <None> will ignore authentication to the registry.
+        type: ImagePullSecret
+        # -- ImagePullSecret secret name to reference that contains the ghcr.io docker config
+        name: ghcr-io-registry-creds
+        # -- REQUIRED FOR <ImagePullSecret>: The mount path of the ImagePullSecret within the kube-autorollout pod. Must be unique across registry secrets.
+        mountPath: /etc/secrets/registries/ghcr.io
 
-  # -- DockerHub registry with ImagePullSecret, covers both docker.io and registry-1.docker.io
-  - hostnamePattern: "docker.io"
-    secret:
-      type: ImagePullSecret
-      name: docker-io-registry-creds
-      mountPath: /etc/secrets/registries/docker.io
+    # -- DockerHub registry with ImagePullSecret, covers both docker.io and registry-1.docker.io
+    - hostnamePattern: "docker.io"
+      secret:
+        type: ImagePullSecret
+        name: docker-io-registry-creds
+        mountPath: /etc/secrets/registries/docker.io
 
-  # -- Wildcard-match for JFrog Artifactory registry with "subdomain method for docker" https://jfrog.com/help/r/jfrog-artifactory-documentation/the-subdomain-method-for-docker
-  - hostnamePattern: "*.artifactory.example.com"
-    secret:
-      type: Opaque
-      # -- Kubernetes Secret name of secret type Opaque to reference. The secret should contain the Docker Registry API token, personal access token, JFrog Artifactory identity token, etc.
-      name: jfrog-artifactory-registry-creds
-      # -- OPTIONAL FOR <Opaque>: The key to reference of the secret. Will be referenced in the config automatically if .token is unset
-      key: IDENTITY_TOKEN
+    # -- Wildcard-match for JFrog Artifactory registry with "subdomain method for docker" https://jfrog.com/help/r/jfrog-artifactory-documentation/the-subdomain-method-for-docker
+    - hostnamePattern: "*.artifactory.example.com"
+      secret:
+        type: Opaque
+        # -- Kubernetes Secret name of secret type Opaque to reference. The secret should contain the Docker Registry API token, personal access token, JFrog Artifactory identity token, etc.
+        name: jfrog-artifactory-registry-creds
+        # -- OPTIONAL FOR <Opaque>: The key to reference of the secret. Will be referenced in the config automatically if .token is unset
+        key: IDENTITY_TOKEN
 
-  # -- JFrog Artifactory registry with "repository path method for docker" https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker
-  - hostnamePattern: "another-artifactory.example.com"
-    secret:
-      name: jfrog-artifactory-registry-creds
-      key: IDENTITY_TOKEN
+    # -- JFrog Artifactory registry with "repository path method for docker" https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker
+    - hostnamePattern: "another-artifactory.example.com"
+      secret:
+        name: jfrog-artifactory-registry-creds
+        key: IDENTITY_TOKEN
 
-featureFlags:
-  # -- Enables an automated fallback for Artifactory's "repository path method for docker" setup
-  enableJfrogArtifactoryFallback: true
+  featureFlags:
+    # -- Enables an automated fallback for Artifactory's "repository path method for docker" setup
+    enableJfrogArtifactoryFallback: true
 ```
 
 kube-autorollout expects your Kubernetes secrets to be existing before installing the Helm chart.
@@ -126,19 +127,19 @@ For a quick start, you can create the above-mentioned secret examples like this:
 
 JFrog Artifactory, secret type `Opaque`:
 
-```
+```bash
 kubectl create secret generic jfrog-artifactory-registry-creds --from-literal=IDENTITY_TOKEN=<jfrog-identity-token-here>
 ```
 
 GitHub personal access token, secret type `ImagePullSecret`:
 
-```
+```bash
 kubectl create secret docker-registry ghcr-io-registry-creds --docker-server=https://ghcr.io --docker-username=<github-username-here> --docker-password=<github-personal-access-token-here>
 ```
 
 Docker personal access token, secret type `ImagePullSecret`:
 
-```
+```bash
 kubectl create secret docker-registry docker-io-registry-creds --docker-server=https://docker.io --docker-username=<docker-io-username-here> --docker-password=<docker-io-personal-access-token-here>
 ```
 
@@ -183,9 +184,11 @@ To ensure compatibility to the state drift detection in GitOps tools like ArgoCD
 
 ```yaml
 #...
-featureFlags:
+config:
   #...
-  enableKubectlAnnotation: true
+  featureFlags:
+    #...
+    enableKubectlAnnotation: true
 ```
 
 This changes the kube-autorollout patch `annotation` key (that internally triggers the redeployment of the pods) from
@@ -194,6 +197,38 @@ The latter annotation is applied by `kubectl` when executing the command `kubect
 Most GitOps tools like ArgoCD and FluxCD ignore the kubectl annotation from state drift detection. If you are not using
 this value on "true" you might need to add further configuration to ArgoCD and FluxCD to not show the kube-autorollout
 annotation as a state drift.
+
+### Custom CA certificates
+
+When connecting to private registries that present a TLS certificate that is not signed by a well-known/public
+certificate authority, you need to provide the custom ca certificates as part of the Helm Chart values.
+
+```yaml 
+#...
+config:
+  #...
+  tls:
+    customCaCertificates:
+      enabled: true
+      secrets:
+        - # -- The name of the secret to reference that includes the custom CA certificate chain
+          name: custom-ca-01-secret
+          # -- The key / subPath within the secret to mount in kube-autorollout
+          subPath: ca-01.crt
+          # -- The mountPath within kube-autoroll, will be auto-wired in the config
+          mountPath: /etc/secrets/ca/custom-ca-01.crt
+```
+
+This snippet will mount the subPath `ca-01.crt` of Kubernetes secret `custom-ca-01-secret` into the kube-autorollout
+pod. The `mountPath` needs to be a unique value when multiple ca certificates are mounted. The Helm Chart is auto-wiring
+all `mountPath` values into the config file automatically.
+
+kube-autorollout expects your Kubernetes secrets to be existing before installing the Helm chart. For a quick start, you
+can create the above-mentioned secret example like this:
+
+```bash
+kubectl create secret generic custom-ca-01-secret --from-file=ca-01.crt={path/to/ca-01.crt}
+```
 
 ## Supported container registries
 

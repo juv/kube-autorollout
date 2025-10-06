@@ -1,6 +1,6 @@
 # kube-autorollout
 
-![Version: 0.4.0](https://img.shields.io/badge/Version-0.4.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.0](https://img.shields.io/badge/AppVersion-0.2.0-informational?style=flat-square)
+![Version: 0.5.0](https://img.shields.io/badge/Version-0.5.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.3.0](https://img.shields.io/badge/AppVersion-0.3.0-informational?style=flat-square)
 
 A Helm chart for kube-autorollout
 
@@ -31,7 +31,7 @@ A Helm chart for kube-autorollout
 | fullnameOverride | string | `""` | String to fully override `"kube-autorollout.fullname"` |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for the container image |
 | image.repository | string | `"ghcr.io/juv/kube-autorollout"` | The image repository name to use for the container image |
-| image.tag | string | `"v0.1.0"` | Image tag to use for the container image. Overrides the image tag whose default is the chart appVersion. |
+| image.tag | string | `"v0.3.0"` | Image tag to use for the container image. Overrides the image tag whose default is the chart appVersion. |
 | imagePullSecrets | list | `[]` | Secrets with credentials to pull images from a private registry. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/ |
 | livenessProbe | object | `{"httpGet":{"path":"/health/live","port":"http"}}` | Liveness probe for the kube-autorollout controller. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/ |
 | nameOverride | string | `""` | Override to the chart name |

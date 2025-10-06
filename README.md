@@ -7,23 +7,25 @@
 [![Artifact Hub](https://img.shields.io/endpoint?color=blue&url=https://artifacthub.io/badge/repository/kube-autorollout)](https://artifacthub.io/packages/search?repo=kube-autorollout)
 [![crates.io](https://img.shields.io/crates/v/kube-autorollout.svg?color=blue)](https://crates.io/crates/kube-autorollout)
 
-A lightweight Kubernetes controller that automatically triggers Kubernetes `Deployment` rollouts when container image
-_digests_ change, ensuring your applications stay up-to-date without manual intervention 🚀
+A lightweight Kubernetes controller that automatically triggers Kubernetes `Deployment`/`StatefulSet`/`DaemonSet`
+rollouts when container image _digests_ change, ensuring your applications stay up-to-date without manual intervention
+🚀
 
 ## Overview
 
-kube-autorollout monitors Kubernetes deployments and automatically triggers rollouts when new container image versions
-are available. Unlike other image update mechanisms that require changing tags via semver version bump, this tool
+kube-autorollout monitors Kubernetes resources of kind `Deployment`/`StatefulSet`/`DaemonSet` and automatically triggers
+rollouts when new container image versions are available. Unlike other image update mechanisms that require changing
+tags via semver version bump, this tool
 is built to compare container [image digests](https://docs.docker.com/dhi/core-concepts/digests/) (`@sha256:...`) for
 static / mutable tags (e.g., `latest`, `main`, `nightly`).
 
-When to use kube-autorollout?
+**Benefits of kube-autorollout:**
 
 - Use kube-autorollout when deploying static / mutable image tags like `latest`, `main`, `nightly`, etc. to ensure
   your up-to-date baseline is being executed in the Kubernetes cluster. Particularly suited for _development
   environments_.
 - CI/CD pipelines are less complex and stay declarative. No imperative tasks, no fake Helm chart version bumps, no
-  additional git commits in your pipelines to trigger rollouts
+  additional git commits, no connection to the Kubernetes cluster(s) in your CI system to trigger rollouts
 - ArgoCD Image Updater only supports ArgoCD Applications but your development environments contains both ArgoCD
   applications as well as manually installed Helm chart releases, for which you want automated rollouts.
   kube-autorollout will automate rollouts for the supported Kubernetes resources, no matter which tool installed
@@ -34,7 +36,8 @@ When to use kube-autorollout?
 ## tl;dr
 
 1) Install kube-autorollout using the Helm chart, [configure container registries](#Configuration)
-2) Target `Deployment` resources for auto-rollouts by adding the label `kube-autorollout/enabled=true`
+2) Target `Deployment`/`StatefulSet`/`DaemonSet` resources for auto-rollouts by adding the label
+   `kube-autorollout/enabled=true`
 3) Push images to your container registry with the same **static** tag, e.g., `latest`, `main`, `nightly`
 4) ???
 5) Profit
@@ -46,7 +49,7 @@ When to use kube-autorollout?
   the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md), which can
   be seen as a more vendor-neutral, interoperable standard of
   the [Docker Registry HTTP API v2](https://github.com/distribution/distribution/blob/5cb406d511b7b9163bff9b6439072e4892e5ae3b/docs/spec/api.md)
-- **Label-based selection**: Uses Kubernetes labels to selectively monitor deployments
+- **Label-based selection**: Uses Kubernetes labels to selectively monitor Kubernetes resources
 - **GitOps compatiblity**: Compatible to GitOps tools like ArgoCD and FluxCD
 - **OCI registry support**: Supports multiple container registries in a single instance of kube-autorollout.
   Including Docker Hub (docker.io, registry-1.docker.io), GitHub Container Registry (ghcr.io), JFrog Artifactory, and
@@ -54,8 +57,8 @@ When to use kube-autorollout?
 - **JFrog Artifactory compatiblity**: Special handling for JFrog Artifactory
   with a configuration of
   the [repository path method for docker](https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
-- **Multi-container rollout**: Supports automated rollouts for Deployments with a pod template containing multiple
-  containers
+- **Multi-container rollout**: Supports automated rollouts for Kubernetes resources with a pod template
+  containing multiple containers
 - **Cron-based scheduling**: Configurable scheduling of the main controller loop with cron expressions
 - **Custom CA certificates**: Support for custom certificate authority certificates for secure TLS connections to
   private registries
@@ -78,8 +81,8 @@ The Helm Chart is available on Artifact Hub:
 
 ### Configuration
 
-Create a Helm values file/override that covers all registries for your deployments that are labeled with
-`kube-autorollout/enabled=true`. For some quick examples, see the snippet below.
+Create a Helm values file/override that covers all registries for the supported Kubernetes resource kinds that are
+labeled with `kube-autorollout/enabled=true`. For some quick examples, see the snippet below.
 
 For full field reference, see the [Helm chart](charts/kube-autorollout) README.
 
@@ -144,12 +147,12 @@ Docker personal access token, secret type `ImagePullSecret`:
 kubectl create secret docker-registry docker-io-registry-creds --docker-server=https://docker.io --docker-username=<docker-io-username-here> --docker-password=<docker-io-personal-access-token-here>
 ```
 
-### Select `Deployment` resources for auto-rollout
+### Select Kubernetes resources for auto-rollout
 
 After configuring your registry credentials, add the **label** `kube-autorollout/enabled=true` to any of your
-deployments.
+`Deployment`/`StatefulSet`/`DaemonSet` resources.
 That's it. Your pods can have any number of containers. Your image tag can be any static tag, it does not necessarily be
-`latest`.
+`latest`, as shown in the snippet below.
 
 kube-autorollout will print warnings into the log for containers that do not set `imagePullPolicy: Always`. Make sure
 you set that imagePullPolicy, otherwise the updated
@@ -269,9 +272,9 @@ todo
     - Check hostname pattern matching
     - Ensure correct secrets are referenced in your Helm values
 
-2. No `Deployment` rollouts occur
+2. No rollouts occur
     - Ensure kube-autorollout is running in the correct Kubernetes namespace
-    - Verify the `kube-autorollout/enabled=true` label is present on each `Deployment` of interest
+    - Verify the `kube-autorollout/enabled=true` label is present on each Kubernetes resource of interest
     - Make sure you pushed your image, duh
     - Check kube-autorollout log for error messages
     - Check RBAC permissions for your kube-autorollout `serviceaccount` in case you are not using the

@@ -10,6 +10,6 @@ rules:
     resources: ["pods"]
     verbs: ["get", "list"]
   - apiGroups: ["apps"]
-    resources: ["deployments"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
     verbs: ["get", "list", "patch"]
 {{- end }}

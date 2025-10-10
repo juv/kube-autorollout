@@ -11,23 +11,23 @@ config:
     # -- Webserver port
     port: 8080
   # -- Container registries
-  registries:
-    - #  -- the hostname glob pattern this registry. Example: "*.your-jfrog-artifactory.example.com" or "ghcr.io" or "docker.io"
-      hostnamePattern: "ghcr.io"
-      # -- The Kubernetes secret to mount as an environment variable into the pod
-      secret:
-        # -- REQUIRED: The type of the secret - ImagePullSecret, Opaque, None. <ImagePullSecret> must define keys "name" and "mountPath". <Opaque> with Kubernetes Secret must define keys "name" and "key", optionally "username". <Opaque> with hardcoded token must define keys "token". <None> will ignore authentication to the registry.
-        type: None
-        # -- Kubernetes Secret name of secret type Opaque or ImagePullSecret to reference. The secret should contain the Docker Registry API token, personal access token, JFrog Artifactory identity token, etc.
-        name:
-        # -- REQUIRED FOR <ImagePullSecret>: The mount path of the ImagePullSecret within the kube-autorollout pod. Must be unique across registry secrets.
-        mountPath:
-        # -- OPTIONAL FOR <Opaque>: The key to reference of the secret. Will be referenced in the config automatically if .token is unset
-        key:
-        # -- OPTIONAL FOR <Opaque>: The username to use for this registry. Only required when the registry is requiring an advanced token flow for authentication, that involves trading in the username and api key / api token into a short-living OAuth2.0-esque access token. This is required for ghcr.io and docker.io
-        username:
-        # -- OPTIONAL FOR <Opaque>: Not recommended for production use - use .name and .key instead. A hardcoded token (api token, personal access token, etc.) to be passed in the Authorization header of the Docker manifest request to the registry
-        token:
+  registries: []
+    #- #  -- the hostname glob pattern this registry. Example: "*.your-jfrog-artifactory.example.com" or "ghcr.io" or "docker.io"
+    #  hostnamePattern: "ghcr.io"
+    #  # -- The Kubernetes secret to mount as an environment variable into the pod
+    #  secret:
+    #    # -- REQUIRED: The type of the secret - ImagePullSecret, Opaque, None. <ImagePullSecret> must define keys "name" and "mountPath". <Opaque> with Kubernetes Secret must define keys "name" and "key", optionally "username". <Opaque> with hardcoded token must define keys "token". <None> will ignore authentication to the registry.
+    #    type: None
+    #    # -- Kubernetes Secret name of secret type Opaque or ImagePullSecret to reference. The secret should contain the Docker Registry API token, personal access token, JFrog Artifactory identity token, etc.
+    #    name:
+    #    # -- REQUIRED FOR <ImagePullSecret>: The mount path of the ImagePullSecret within the kube-autorollout pod. Must be unique across registry secrets.
+    #    mountPath:
+    #    # -- OPTIONAL FOR <Opaque>: The key to reference of the secret. Will be referenced in the config automatically if .token is unset
+    #    key:
+    #    # -- OPTIONAL FOR <Opaque>: The username to use for this registry. Only required when the registry is requiring an advanced token flow for authentication, that involves trading in the username and api key / api token into a short-living OAuth2.0-esque access token. This is required for ghcr.io and docker.io
+    #    username:
+    #    # -- OPTIONAL FOR <Opaque>: Not recommended for production use - use .name and .key instead. A hardcoded token (api token, personal access token, etc.) to be passed in the Authorization header of the Docker manifest request to the registry
+    #    token:
   # -- TLS configuration
   tls:
     # -- Custom CA certificates to use within kube-autorollout for verifying TLS connections to registries which present a certificate signed by a non-public CA
@@ -55,7 +55,7 @@ image:
   # -- Image pull policy for the container image
   pullPolicy: IfNotPresent
   # -- Image tag to use for the container image. Overrides the image tag whose default is the chart appVersion.
-  tag: "v0.3.0"
+  tag: "v0.4.0"
 
 # -- Kubernetes RBAC configuration
 rbac:

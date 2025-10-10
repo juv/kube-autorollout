@@ -290,11 +290,6 @@ fn find_matching_image_pull_secret(
                 })?
                 .compile_matcher();
 
-            info!(
-                "normalized_pod_registry_name: {}, pull_secret_hostname_pattern: {}",
-                normalized_pod_registry_name, pull_secret_hostname_pattern
-            );
-
             if glob.is_match(&normalized_pod_registry_name) {
                 let registry_secret = RegistrySecret::ImagePullSecret {
                     mount_path: String::new(),

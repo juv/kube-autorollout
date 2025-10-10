@@ -1,6 +1,6 @@
 # kube-autorollout
 
-![Version: 0.5.0](https://img.shields.io/badge/Version-0.5.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.3.0](https://img.shields.io/badge/AppVersion-0.3.0-informational?style=flat-square)
+![Version: 0.6.0](https://img.shields.io/badge/Version-0.6.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.4.0](https://img.shields.io/badge/AppVersion-0.4.0-informational?style=flat-square)
 
 A Helm chart for kube-autorollout
 
@@ -39,8 +39,9 @@ A Helm chart for kube-autorollout
 | podAnnotations | object | `{}` | Pod annotations for kube-autorollout. More information can be found here: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/ |
 | podLabels | object | `{}` | Pod labels for kube-autorollout. More information can be found here: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ |
 | podSecurityContext | object | `{}` | kube-autorollout pod-level security context. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/ |
-| rbac | object | `{"enabled":true}` | Kubernetes RBAC configuration |
+| rbac | object | `{"enabled":true,"secrets":{"enabled":true}}` | Kubernetes RBAC configuration |
 | rbac.enabled | bool | `true` | Switch to enable/disable the creation of Kubernetes role and rolebinding for the kube-autorollout service account automatically. If false, the role and rolebinding that targets the service account must be created separately. |
+| rbac.secrets.enabled | bool | `true` | Switch to enable/disable the permission for verb GET on Secrets in the Role |
 | readinessProbe | object | `{"httpGet":{"path":"/health/ready","port":"http"}}` | Readiness probe for kube-autorollout controller. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/ |
 | replicaCount | int | `1` | The number of application controller pods to run. A number higher than one does not make sense at this time as the controller is not supporting sharding. |
 | resources | object | `{}` | Resource requests and limits for the kube-autorollout pod |

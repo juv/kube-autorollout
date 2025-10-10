@@ -10,6 +10,7 @@ mod config;
 mod controller;
 mod image_reference;
 mod oci_registry;
+mod rollout;
 mod secret_string;
 mod state;
 mod webserver;

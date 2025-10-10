@@ -10,10 +10,10 @@ use tracing::info;
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct DockerConfig {
-    pub auths: HashMap<String, DockerConfigEntry>,
+    pub auths: HashMap<String, DockerAuth>,
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DockerConfigEntry {
+pub struct DockerAuth {
     username: String,
     password: SecretString,
     pub auth: SecretString,
@@ -83,17 +83,18 @@ fn default_cron_schedule() -> String {
 impl Config {
     pub fn validate(&self) -> Result<()> {
         for registry in &self.registries {
-            Glob::new(&registry.hostname_pattern).context(format!(
-                "invalid hostname pattern {}",
-                registry.hostname_pattern
-            ))?;
+            Glob::new(&registry.hostname_pattern).with_context(|| {
+                format!("invalid hostname pattern {}", registry.hostname_pattern)
+            })?;
         }
 
         for ca_certificate_path in &self.tls.ca_certificate_paths {
-            fs::metadata(ca_certificate_path).context(format!(
-                "File {} does not exist or can not be accessed",
-                ca_certificate_path.to_str().unwrap()
-            ))?;
+            fs::metadata(ca_certificate_path).with_context(|| {
+                format!(
+                    "File {} does not exist or can not be accessed",
+                    ca_certificate_path.to_str().unwrap()
+                )
+            })?;
         }
         Ok(())
     }
@@ -106,12 +107,14 @@ impl Config {
             } = &mut registry.secret
             {
                 let file_path = format!("{}/.dockerconfigjson", &mount_path);
-                let file_content = fs::read_to_string(&file_path).context(format!(
-                    "Could not read ImagePullSecret content from file {}",
-                    file_path
-                ))?;
+                let file_content = fs::read_to_string(&file_path).with_context(|| {
+                    format!(
+                        "Could not read ImagePullSecret content from file {}",
+                        file_path
+                    )
+                })?;
 
-                let parsed_config: DockerConfig = serde_json::from_str(&file_content).context(
+                let parsed_config: DockerConfig = serde_json::from_str(&file_content).with_context(||
                     format!("Could not parse ImagePullSecret content to Docker Config structure from file {}", mount_path),
                 )?;
 

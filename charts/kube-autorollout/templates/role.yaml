@@ -12,4 +12,9 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets", "daemonsets"]
     verbs: ["get", "list", "patch"]
+  {{- if .Values.rbac.secrets.enabled }}
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+  {{- end }}
 {{- end }}

@@ -1,146 +1,21 @@
+use crate::config::{Config, DockerConfig, RegistrySecret};
 use crate::image_reference::ImageReference;
 use crate::oci_registry::fetch_digest_from_tag;
+use crate::rollout::Rollout;
 use crate::state::{ContainerImageReference, ControllerContext};
 use anyhow::Context;
-use chrono::Utc;
+use futures::future::try_join_all;
+use globset::Glob;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
-use k8s_openapi::api::core::v1::{ContainerStatus, Pod};
-use k8s_openapi::NamespaceResourceScope;
-use kube::api::{ListParams, Patch, PatchParams};
-use kube::{Api, Client, Resource, ResourceExt};
-use serde::de::DeserializeOwned;
-use serde_json::json;
+use k8s_openapi::api::core::v1::{ContainerStatus, Pod, Secret};
+use kube::api::ListParams;
+use kube::{Api, Client, ResourceExt};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::fmt::Debug;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 static KUBE_AUTOROLLOUT_LABEL: &str = "kube-autorollout/enabled=true";
-static KUBE_AUTOROLLOUT_ANNOTATION: &str = "kube-autorollout/restartedAt";
-static KUBE_AUTOROLLOUT_FIELD_MANAGER: &str = "kube-autorollout";
-static KUBECTL_ROLLOUT_ANNOTATION: &str = "kubectl.kubernetes.io/restartedAt";
-
-trait AutoRolloutResource
-where
-    Self: Resource<DynamicType = (), Scope = NamespaceResourceScope>
-        + Clone
-        + Debug
-        + Send
-        + Sync
-        + DeserializeOwned
-        + 'static,
-{
-    fn get_kind_name() -> &'static str {
-        std::any::type_name::<Self>().split("::").last().unwrap()
-    }
-    fn selector(&self) -> BTreeMap<String, String>;
-    fn desired_replicas(&self) -> i32;
-    fn actual_replicas(&self) -> i32;
-
-    async fn patch_rollout_annotation(
-        api: &Api<Self>,
-        resource_name: &str,
-        enable_kubectl_annotation: bool,
-    ) -> anyhow::Result<()> {
-        let k8s_resource_kind = Self::get_kind_name();
-
-        let annotation = match enable_kubectl_annotation {
-            true => KUBECTL_ROLLOUT_ANNOTATION,
-            false => KUBE_AUTOROLLOUT_ANNOTATION,
-        };
-        let patch = json!({
-            "spec": {
-                "template": {
-                    "metadata": {
-                        "annotations": {
-                            annotation: Utc::now().to_rfc3339(),
-                        }
-                    }
-                }
-            }
-        });
-
-        debug!(
-            "Patching {} {} with patch {:?}",
-            k8s_resource_kind, resource_name, patch
-        );
-        api.patch(
-            resource_name,
-            &PatchParams::apply(KUBE_AUTOROLLOUT_FIELD_MANAGER),
-            &Patch::Merge(&patch),
-        )
-        .await
-        .context(format!(
-            "Failed to patch {} {} to trigger rollout",
-            k8s_resource_kind, resource_name
-        ))?;
-        Ok(())
-    }
-}
-
-impl AutoRolloutResource for Deployment {
-    fn selector(&self) -> BTreeMap<String, String> {
-        self.spec
-            .as_ref()
-            .unwrap()
-            .selector
-            .match_labels
-            .clone()
-            .unwrap()
-    }
-
-    //https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#DeploymentStatus
-    fn desired_replicas(&self) -> i32 {
-        self.spec.as_ref().unwrap().replicas.unwrap()
-    }
-
-    fn actual_replicas(&self) -> i32 {
-        self.status.as_ref().unwrap().replicas.unwrap_or(0)
-    }
-}
-
-impl AutoRolloutResource for StatefulSet {
-    fn selector(&self) -> BTreeMap<String, String> {
-        self.spec
-            .as_ref()
-            .unwrap()
-            .selector
-            .match_labels
-            .clone()
-            .unwrap()
-    }
-
-    //https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/stateful-set-v1/#StatefulSetStatus
-    fn desired_replicas(&self) -> i32 {
-        self.spec.as_ref().unwrap().replicas.unwrap()
-    }
-
-    fn actual_replicas(&self) -> i32 {
-        self.status.as_ref().unwrap().replicas
-    }
-}
-
-impl AutoRolloutResource for DaemonSet {
-    fn selector(&self) -> BTreeMap<String, String> {
-        self.spec
-            .as_ref()
-            .unwrap()
-            .selector
-            .match_labels
-            .clone()
-            .unwrap()
-    }
-
-    //https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/daemon-set-v1/#DaemonSetStatus
-    fn desired_replicas(&self) -> i32 {
-        self.status.as_ref().unwrap().desired_number_scheduled
-    }
-
-    fn actual_replicas(&self) -> i32 {
-        self.status.as_ref().unwrap().number_ready
-    }
-}
 
 pub async fn create_client() -> anyhow::Result<Client> {
     info!("Initializing K8s controller");
@@ -173,12 +48,13 @@ pub async fn run(ctx: ControllerContext) -> anyhow::Result<()> {
 
 async fn reconcile<T>(ctx: Arc<ControllerContext>) -> anyhow::Result<()>
 where
-    T: AutoRolloutResource,
+    T: Rollout,
 {
-    let kind_name = T::get_kind_name();
+    let kind_name = T::kind_name();
     let api: Api<T> = Api::default_namespaced(ctx.kube_client.clone());
     let pods: Api<Pod> = Api::default_namespaced(ctx.kube_client.clone());
     let lp = ListParams::default().labels(KUBE_AUTOROLLOUT_LABEL);
+    let secrets: Api<Secret> = Api::default_namespaced(ctx.kube_client.clone());
 
     // List the resources based on label selector (server-side filtering)
     let resource_list = api.list(&lp).await?;
@@ -195,6 +71,7 @@ where
         info!("Found {} resource with label: {}", kind_name, resource_name);
         let desired_replicas = resource.desired_replicas();
         let actual_replicas = resource.actual_replicas();
+
         if desired_replicas > 0 && actual_replicas > 0 {
             let selector = resource.selector();
             let pod = get_associated_pod(&pods, &selector).await?;
@@ -202,25 +79,39 @@ where
 
             warn_misconfigured_container_image_pull_policies(&pod);
 
-            let container_image_references = get_pod_container_image_references(&pod);
+            let container_image_references = get_pod_container_image_references(&pod)
+                .with_context(|| {
+                    format!(
+                        "Could not retrieve container image references for pod {}",
+                        pod_name
+                    )
+                })?;
 
-            for reference in container_image_references?.iter() {
+            let image_pull_secrets = resource.image_pull_secrets();
+            debug!(
+                "Parsed image pull secrets {:?} for resource {}",
+                image_pull_secrets, resource_name
+            );
+
+            let image_pull_secrets = collect_image_pull_secrets(&secrets, &image_pull_secrets)
+                .await
+                .with_context(|| {
+                    format!("Failed to collect image pull secrets for pod {}", pod_name)
+                })?;
+
+            for reference in container_image_references.iter() {
                 info!(
                     "Found pod {} container {} with image {} and current digest {}",
                     pod_name, reference.container_name, reference.image_reference, reference.digest
                 );
 
-                let registry_config = ctx
-                    .config
-                    .find_registry_for_hostname(&reference.image_reference.registry)
-                    .context(format!(
-                        "Could not find registry configuration for {}",
-                        reference.image_reference.registry
-                    ))?;
+                let registry_secret =
+                    find_matching_image_pull_secret(&image_pull_secrets, reference)
+                        .or_else(|_| get_registry_secret_from_config(&ctx.config, reference))?;
 
                 let recent_digest = fetch_digest_from_tag(
                     &reference.image_reference,
-                    &registry_config.secret,
+                    &registry_secret,
                     &ctx.http_client,
                     ctx.config.feature_flags.enable_jfrog_artifactory_fallback,
                 )
@@ -241,10 +132,12 @@ where
                         ctx.config.feature_flags.enable_kubectl_annotation,
                     )
                     .await
-                    .context(format!(
-                        "Failed to patch {} resource {} to trigger rollout",
-                        kind_name, resource_name
-                    ))?;
+                    .with_context(|| {
+                        format!(
+                            "Failed to patch {} resource {} to trigger rollout",
+                            kind_name, resource_name
+                        )
+                    })?;
                     info!(
                         "Successfully triggered rollout for {} resource {}",
                         kind_name, resource_name
@@ -310,7 +203,7 @@ async fn get_associated_pod(
             }
         })
         .next()
-        .context(format!("No pod found matching selector {}", label_selector))
+        .with_context(|| format!("No pod found matching selector {}", label_selector))
 }
 
 fn sort_pods_by_creation_timestamp(a: &Pod, b: &Pod) -> Ordering {
@@ -366,4 +259,122 @@ fn warn_misconfigured_container_image_pull_policies(pod: &Pod) {
                 container.name, pod.metadata.name.as_ref().unwrap()
             )
         });
+}
+
+fn normalize_image_registry_name(registry_name: &str) -> String {
+    let registry_name = registry_name
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+
+    //docker.io is internally wrapped to registry-1.docker.io
+    if registry_name.eq("docker.io") {
+        return format!("*.{}", registry_name);
+    }
+    registry_name.to_string()
+}
+
+fn find_matching_image_pull_secret(
+    image_pull_secrets: &Vec<DockerConfig>,
+    container_image_reference: &ContainerImageReference,
+) -> anyhow::Result<RegistrySecret> {
+    let normalized_pod_registry_name =
+        normalize_image_registry_name(&container_image_reference.image_reference.registry);
+    for image_pull_secret in image_pull_secrets {
+        for auth in &image_pull_secret.auths {
+            let pull_secret_hostname_pattern = normalize_image_registry_name(auth.0);
+
+            //As opposed to Docker's config json, the Kubernetes .dockerconfigjson can include * wildcards in the keys, so it needs to be glob'ed: https://kubernetes.io/docs/concepts/containers/images/#config-json
+            let glob = Glob::new(&pull_secret_hostname_pattern)
+                .with_context(|| {
+                    format!("invalid hostname pattern {}", pull_secret_hostname_pattern)
+                })?
+                .compile_matcher();
+
+            if glob.is_match(&normalized_pod_registry_name) {
+                let registry_secret = RegistrySecret::ImagePullSecret {
+                    mount_path: String::new(),
+                    docker_config: image_pull_secret.clone(),
+                };
+
+                info!(
+                    "Found matching image pull secret for pod registry {}",
+                    normalized_pod_registry_name
+                );
+
+                return Ok(registry_secret);
+            }
+        }
+    }
+    anyhow::bail!("No matching image pull secret found");
+}
+
+async fn collect_image_pull_secrets(
+    secrets: &Api<Secret>,
+    image_pull_secrets: &Vec<String>,
+) -> anyhow::Result<Vec<DockerConfig>> {
+    let futures_vec = image_pull_secrets
+        .iter()
+        .map(|name| get_image_pull_secret_content(secrets, name))
+        .collect::<Vec<_>>();
+
+    let configs: Vec<DockerConfig> = try_join_all(futures_vec).await?;
+
+    Ok(configs)
+}
+
+async fn get_image_pull_secret_content(
+    secrets: &Api<Secret>,
+    secret_name: &str,
+) -> anyhow::Result<DockerConfig> {
+    debug!("Getting secret content for secret {}", secret_name);
+
+    let secret = secrets
+        .get(secret_name)
+        .await
+        .with_context(|| format!("Failed to retrieve secret {}", secret_name))?;
+
+    let data = secret
+        .data
+        .with_context(|| format!("Failed to retrieve secret data for secret {}", secret_name))?;
+
+    let docker_config_bytes = &data
+        .get(".dockerconfigjson")
+        .with_context(|| {
+            format!(
+                "Failed to get .dockerconfigjson key from secret {}",
+                secret_name
+            )
+        })?
+        .0;
+
+    let docker_config_str = str::from_utf8(docker_config_bytes)
+        .context("Failed to convert .dockerconfigjson bytes to UTF-8 string")?;
+
+    let docker_config: DockerConfig =
+        serde_json::from_str(&docker_config_str).with_context(|| {
+            format!(
+                "Could not parse secret content to Docker Config structure for secret {}",
+                secret_name
+            )
+        })?;
+
+    Ok(docker_config)
+}
+
+fn get_registry_secret_from_config(
+    config: &Config,
+    reference: &ContainerImageReference,
+) -> anyhow::Result<RegistrySecret> {
+    let registry_name = &reference.image_reference.registry;
+    let secret: RegistrySecret = config
+        .find_registry_for_hostname(registry_name)
+        .with_context(|| {
+            format!(
+                "Could not find registry configuration for {}",
+                registry_name
+            )
+        })?
+        .secret
+        .clone();
+    Ok(secret)
 }

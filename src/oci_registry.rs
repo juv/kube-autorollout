@@ -25,10 +25,8 @@ pub fn create_client(config: &Config) -> Result<Client> {
     let mut client_builder = Client::builder();
 
     for file_path in &config.tls.ca_certificate_paths {
-        let file_content = fs::read(file_path).context(format!(
-            "Failed to read file {}",
-            file_path.to_str().unwrap()
-        ))?;
+        let file_content = fs::read(file_path)
+            .with_context(|| format!("Failed to read file {}", file_path.to_str().unwrap()))?;
         let cert = Certificate::from_pem(&file_content).context("Failed to parse certificate")?;
         client_builder = client_builder.add_root_certificate(cert);
         info!(
@@ -106,10 +104,12 @@ pub async fn fetch_digest_from_tag(
 
                 let response = fetch_docker_manifest(client, registry_secret, &fallback_url)
                     .await
-                    .context(format!(
-                        "Failed to fetch manifest from Artifactory fallback url {}",
-                        fallback_url
-                    ))?;
+                    .with_context(|| {
+                        format!(
+                            "Failed to fetch manifest from Artifactory fallback url {}",
+                            fallback_url
+                        )
+                    })?;
 
                 let digest = get_digest_from_response(&response)?;
                 return Ok(digest);
@@ -226,18 +226,24 @@ async fn handle_oauth_authentication_challenge(
         })
         .collect();
 
-    let realm = auth_challenge_map.remove("realm").context(format!(
-        "Expected missing field realm in WWW-Authenticate challenge from {}",
-        registry
-    ))?;
-    let service = auth_challenge_map.get("service").context(format!(
-        "Expected missing field service in WWW-Authenticate challenge from {}",
-        registry
-    ))?;
-    let scope = auth_challenge_map.get("scope").context(format!(
-        "Expected missing field scope in WWW-Authenticate challenge from {}",
-        registry
-    ))?;
+    let realm = auth_challenge_map.remove("realm").with_context(|| {
+        format!(
+            "Expected missing field realm in WWW-Authenticate challenge from {}",
+            registry
+        )
+    })?;
+    let service = auth_challenge_map.get("service").with_context(|| {
+        format!(
+            "Expected missing field service in WWW-Authenticate challenge from {}",
+            registry
+        )
+    })?;
+    let scope = auth_challenge_map.get("scope").with_context(|| {
+        format!(
+            "Expected missing field scope in WWW-Authenticate challenge from {}",
+            registry
+        )
+    })?;
 
     info!(
         "Requesting authentication token from {} for service {} and scope {}",

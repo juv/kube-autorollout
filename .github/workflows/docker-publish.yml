@@ -67,6 +67,26 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Save image as artifact (PRs only)
+        if: github.event_name == 'pull_request'
+        run: |
+          mkdir -p image-tars
+          for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' '); do
+            IMAGE_ID=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "^$tag$" || true)
+            if [ -n "$IMAGE_ID" ]; then
+              SAFE_TAG=$(echo "$tag" | sed 's/[^a-zA-Z0-9_.-]/_/g')
+              docker save "$tag" -o "image-tars/$SAFE_TAG.tar"
+            fi
+          done
+        shell: bash
+
+      - name: Upload image tarballs (PRs only)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-tars
+          path: image-tars/*.tar
+
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
       # repository is public to avoid leaking data.  If you would like to publish
@@ -168,6 +188,30 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
           kubectl wait --for=condition=ready nodes --all --timeout=60s
+
+      - name: Download image tarballs (PRs only)
+        if: github.event_name == 'pull_request'
+        uses: actions/download-artifact@v4
+        with:
+          name: image-tars
+
+      - name: Load and import images to k3d (PRs only)
+        if: github.event_name == 'pull_request'
+        run: |
+          for tar in image-tars/*.tar; do
+            docker load -i "$tar"
+          done
+          # Import each tag we know we built (from build job output)
+          for tag in $(echo "${{ needs.build.outputs.tags }}" | tr '\n' ' '); do
+            k3d image import "$tag" --cluster kube-autorollout-e2e || true
+          done
+
+      - name: Import built image to k3d (push/release only)
+        if: github.event_name != 'pull_request'
+        run: |
+          for tag in $(echo "${{ needs.build.outputs.tags }}" | tr '\n' ' '); do
+            k3d image import "$tag" --cluster kube-autorollout-e2e || true
+          done
 
       - name: Install kube-autorollout using Helm
         run: |

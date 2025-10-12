@@ -191,6 +191,7 @@ jobs:
             --namespace e2e-test
 
       - name: Build initial test application image
+        id: build-test-image
         run: |
           # Create a simple test application
           mkdir -p test-app
@@ -213,9 +214,11 @@ jobs:
           # Get initial digest
           INITIAL_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
           echo "INITIAL_DIGEST=$INITIAL_DIGEST" >> $GITHUB_ENV
+          echo "E2E_TAG=$E2E_TAG" >> $GITHUB_ENV
 
       - name: Create test deployment
-        run: |          
+        run: |
+          E2E_TAG=${{ steps.build-test-image.outputs.E2E_TAG }}
           # Create a test deployment that kube-autorollout should monitor
           kubectl apply -f - <<EOF
           apiVersion: apps/v1

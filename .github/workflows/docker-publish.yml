@@ -172,7 +172,7 @@ jobs:
       - name: Install kube-autorollout using Helm
         run: |
           # Import kube-autorollout image to k3d cluster
-          for tag in ${{ needs.build.outputs.tags }}; do
+          for tag in $(echo "${{ needs.build.outputs.tags }}" | tr '\n' ' '); do
             k3d image import "$tag" --cluster kube-autorollout-e2e || true
           done
           

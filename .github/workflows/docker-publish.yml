@@ -166,9 +166,6 @@ jobs:
           kubectl get nodes
           kubectl wait --for=condition=ready nodes --all --timeout=60s
 
-          # Create e2e namespace (used to deploy kube-autorollout and a test application)
-          kubectl create namespace e2e-test
-
       - name: Install kube-autorollout using Helm
         run: |
           # Import kube-autorollout image to k3d cluster
@@ -187,8 +184,7 @@ jobs:
           kubectl create secret docker-registry ghcr-pull-secret \
             --docker-server=ghcr.io \
             --docker-username=${{ github.actor }} \
-            --docker-password=${{ secrets.GITHUB_TOKEN }} \
-            --namespace e2e-test
+            --docker-password=${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push initial test application image
         id: build-test-image
@@ -227,7 +223,6 @@ jobs:
           kind: Deployment
           metadata:
             name: test-app
-            namespace: e2e-test
             annotations:
               kube-autorollout.io/enabled: "true"
           spec:

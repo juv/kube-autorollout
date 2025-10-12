@@ -175,12 +175,12 @@ jobs:
           k3d image import ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.digest }} --cluster kube-autorollout-e2e
           
           # Install kube-autorollout from Helm Chart 
-          helm install kube-autorollout ./charts/kube-autorollout -n e2e-test --wait --timeout=30s --set image.tag=${{ needs.build.outputs.digest }}
+          helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set image.tag=${{ needs.build.outputs.digest }}
           
           # Wait for kube-autorollout controller to be ready
           kubectl get pods -l app.kubernetes.io/name=kube-autorollout          
           kubectl wait --for=condition=available deployment/kube-autorollout --timeout=30s
-          kubectl logs -n kube-autorollout-system deployment/kube-autorollout --tail=50
+          kubectl logs deployment/kube-autorollout --tail=50
           
       - name: Create GHCR image pull secret in k3d cluster
         run: |
@@ -250,13 +250,17 @@ jobs:
           EOF
 
       - name: Wait for test deployment to be ready
+        id: wait-for-test-app
         run: |
-          kubectl wait --for=condition=available \
-            deployment/test-app \
-            -n e2e-test \
-            --timeout=60s
+          kubectl wait --for=condition=available deployment/test-app --timeout=60s
           
-          kubectl get deployment test-app -n e2e-test -o wide
+          kubectl get deployment test-app -o wide
+          
+          # Get initial generation
+          INITIAL_GENERATION=$(kubectl get deployment test-app -o jsonpath='{.metadata.generation}')
+          echo "Initial deployment generation: $INITIAL_GENERATION"
+          
+          echo "INITIAL_GENERATION=$INITIAL_GENERATION" >> $GITHUB_ENV
 
       - name: Build and push changed test application image
         run: |
@@ -272,4 +276,36 @@ jobs:
           
           # Get initial digest
           UPDATED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
+          
+          # Verify digests are different
+          if [ "$INITIAL_DIGEST" = "$NEW_DIGEST" ]; then
+          echo "ERROR: Digests should be different but are the same!"
+          exit 1
+          fi        
+        
+          echo "UPDATED_DIGEST=$UPDATED_DIGEST" >> $GITHUB_ENV
+
+      - name: Confirm kube-autorollout works :-)
+        run: |
+          INITIAL_GENERATION=${{ steps.wait-for-test-app.outputs.INITIAL_GENERATION }}
+          
+          # Wait for generation to change (indicating a rollout was triggered)
+          for i in {1..60}; do
+            CURRENT_GENERATION=$(kubectl get deployment test-app -o jsonpath='{.metadata.generation}')
+            echo "Current generation: $CURRENT_GENERATION (attempt $i/60)"
+            
+            if [ "$CURRENT_GENERATION" -gt "$INITIAL_GENERATION" ]; then
+              echo "✅ Rollout detected! Generation changed from $INITIAL_GENERATION to $CURRENT_GENERATION"
+              break
+            fi
+            
+            if [ $i -eq 60 ]; then
+              echo "❌ Timeout waiting for rollout to be triggered"
+              kubectl logs -l app.kubernetes.io/name=kube-autorollout --tail=100
+              exit 1
+            fi
+            
+            sleep 5
+          done
+          
           echo "UPDATED_DIGEST=$UPDATED_DIGEST" >> $GITHUB_ENV

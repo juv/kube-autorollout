@@ -177,7 +177,7 @@ jobs:
           done
           
           # Install kube-autorollout from Helm Chart 
-          helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set image.tag=${{ github.sha }}
+          helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set config.cronSchedule="*/10 * * * * *" --set image.tag=${{ github.sha }}
           
           # Wait for kube-autorollout controller to be ready
           kubectl get pods -l app.kubernetes.io/name=kube-autorollout          
@@ -307,5 +307,3 @@ jobs:
             
             sleep 5
           done
-          
-          echo "UPDATED_DIGEST=$UPDATED_DIGEST" >> $GITHUB_ENV

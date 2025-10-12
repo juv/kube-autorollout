@@ -190,7 +190,7 @@ jobs:
             --docker-password=${{ secrets.GITHUB_TOKEN }} \
             --namespace e2e-test
 
-      - name: Build initial test application image
+      - name: Build and push initial test application image
         id: build-test-image
         run: |
           # Create a simple test application
@@ -257,3 +257,19 @@ jobs:
             --timeout=60s
           
           kubectl get deployment test-app -n e2e-test -o wide
+
+      - name: Build and push changed test application image
+        run: |
+          # Change output of index.html to trigger a "change" in the image
+          cat > test-app/index.html << 'EOF'
+          <html><body><h1>Test App v2</h1></body></html>
+          EOF
+          
+          # Build and push initial version
+          E2E_TAG=${{ steps.build-test-image.outputs.E2E_TAG }}
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG test-app/
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG
+          
+          # Get initial digest
+          UPDATED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
+          echo "UPDATED_DIGEST=$UPDATED_DIGEST" >> $GITHUB_ENV

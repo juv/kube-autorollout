@@ -132,3 +132,111 @@ jobs:
                 body: body
               });
             }
+  # End-to-End testing with multiple Kubernetes versions
+  e2e-test:
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        k8s-version:
+          - v1.32
+          - v1.33
+          - v1.34
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up k3d cluster
+        uses: nolar/setup-k3d-k3s@v1
+        with:
+          version: ${{ matrix.k8s-version }}
+          k3d-name: kube-autorollout-e2e
+          k3d-args: >-
+            --no-lb
+            --no-rollback
+            --k3s-arg --disable=traefik,servicelb,metrics-server@server:*
+
+      - name: Verify cluster is ready
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+          kubectl wait --for=condition=ready nodes --all --timeout=60s
+
+          # Create e2e namespace (used to deploy kube-autorollout and a test application)
+          kubectl create namespace e2e-test
+
+      - name: Install kube-autorollout using Helm
+        run: |
+          # Import kube-autorollout image to k3d cluster
+          k3d image import ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.build-and-push.outputs.digest }} --cluster kube-autorollout-e2e
+          
+          # Install kube-autorollout from Helm Chart 
+          helm install kube-autorollout ./charts/kube-autorollout -n e2e-test --wait --timeout=30s --set image.tag=${{ steps.build-and-push.outputs.digest }}
+          
+          # Wait for kube-autorollout controller to be ready
+          kubectl get pods -l app.kubernetes.io/name=kube-autorollout          
+          kubectl wait --for=condition=available deployment/kube-autorollout --timeout=30s
+          kubectl logs -n kube-autorollout-system deployment/kube-autorollout --tail=50
+
+      - name: Build initial test application image
+        run: |
+          # Create a simple test application
+          mkdir -p test-app
+          cat > test-app/Dockerfile << 'EOF'
+          FROM nginx:alpine-slim
+          COPY index.html /usr/share/nginx/html/
+          EXPOSE 80
+          CMD ["nginx", "-g", "daemon off;"]
+          EOF
+          
+          cat > test-app/index.html << 'EOF'
+          <html><body><h1>Test App v1</h1></body></html>
+          EOF
+          
+          # Build and push initial version
+          E2E_TAG=e2e-test-app-k8s-${{ matrix.k8s-version }}
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG test-app/
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG
+          
+          # Get initial digest
+          INITIAL_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
+          echo "INITIAL_DIGEST=$INITIAL_DIGEST" >> $GITHUB_ENV
+
+      - name: Create test deployment
+        run: |          
+          # Create a test deployment that kube-autorollout should monitor
+          kubectl apply -f - <<EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: test-app
+            namespace: e2e-test
+            annotations:
+              kube-autorollout.io/enabled: "true"
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app: test-app
+            template:
+              metadata:
+                labels:
+                  app: test-app
+              spec:
+                containers:
+                - name: test-app
+                  image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG
+                  ports:
+                  - containerPort: 80
+          EOF
+
+      - name: Wait for test deployment to be ready
+        run: |
+          kubectl wait --for=condition=available \
+            deployment/test-app \
+            -n e2e-test \
+            --timeout=60s
+          
+          kubectl get deployment test-app -n e2e-test -o wide

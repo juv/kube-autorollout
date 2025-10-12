@@ -78,7 +78,7 @@ jobs:
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
     outputs:
-      digest: ${{ steps.build_and_push.outputs.digest }}
+      digest: ${{ steps.build-and-push.outputs.digest }}
   update-release:
     needs: build
     if: github.event_name == 'release' && github.event.action == 'published'

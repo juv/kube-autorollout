@@ -206,6 +206,21 @@ jobs:
             k3d image import "$tag" --cluster kube-autorollout-e2e || true
           done
 
+      - name: Log into GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull built image(s)
+        if: github.event_name != 'pull_request'
+        run: |
+          for tag in $(echo "${{ needs.build.outputs.tags }}" | tr '\n' ' '); do
+            docker pull "$tag"
+          done
+
       - name: Import built image to k3d (push/release only)
         if: github.event_name != 'pull_request'
         run: |

@@ -52,6 +52,9 @@ jobs:
         uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=sha,format=long
+          type=ref,event=pr
 
       - name: Build and push Docker image
         id: build-and-push
@@ -78,7 +81,7 @@ jobs:
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
     outputs:
-      digest: ${{ steps.build-and-push.outputs.digest }}
+      tags: ${{ steps.meta.outputs.tags }}
   update-release:
     needs: build
     if: github.event_name == 'release' && github.event.action == 'published'
@@ -169,10 +172,12 @@ jobs:
       - name: Install kube-autorollout using Helm
         run: |
           # Import kube-autorollout image to k3d cluster
-          k3d image import ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.digest }} --cluster kube-autorollout-e2e
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            k3d image import "$tag" --cluster kube-autorollout-e2e || true
+          done
           
           # Install kube-autorollout from Helm Chart 
-          helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set image.tag=${{ needs.build.outputs.digest }}
+          helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set image.tag=${{ github.sha }}
           
           # Wait for kube-autorollout controller to be ready
           kubectl get pods -l app.kubernetes.io/name=kube-autorollout          

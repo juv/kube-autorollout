@@ -235,6 +235,8 @@ jobs:
                 labels:
                   app: test-app
               spec:
+                imagePullSecrets:
+                - name: ghcr-pull-secret
                 containers:
                 - name: test-app
                   image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG

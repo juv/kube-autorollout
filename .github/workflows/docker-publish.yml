@@ -77,6 +77,8 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+    outputs:
+      digest: ${{ steps.build_and_push.outputs.digest }}
   update-release:
     needs: build
     if: github.event_name == 'release' && github.event.action == 'published'
@@ -170,15 +172,23 @@ jobs:
       - name: Install kube-autorollout using Helm
         run: |
           # Import kube-autorollout image to k3d cluster
-          k3d image import ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.build-and-push.outputs.digest }} --cluster kube-autorollout-e2e
+          k3d image import ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.digest }} --cluster kube-autorollout-e2e
           
           # Install kube-autorollout from Helm Chart 
-          helm install kube-autorollout ./charts/kube-autorollout -n e2e-test --wait --timeout=30s --set image.tag=${{ steps.build-and-push.outputs.digest }}
+          helm install kube-autorollout ./charts/kube-autorollout -n e2e-test --wait --timeout=30s --set image.tag=${{ needs.build.outputs.digest }}
           
           # Wait for kube-autorollout controller to be ready
           kubectl get pods -l app.kubernetes.io/name=kube-autorollout          
           kubectl wait --for=condition=available deployment/kube-autorollout --timeout=30s
           kubectl logs -n kube-autorollout-system deployment/kube-autorollout --tail=50
+          
+      - name: Create GHCR image pull secret in k3d cluster
+        run: |
+          kubectl create secret docker-registry ghcr-pull-secret \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            --namespace e2e-test
 
       - name: Build initial test application image
         run: |

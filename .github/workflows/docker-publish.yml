@@ -153,6 +153,7 @@ jobs:
       fail-fast: false
       matrix:
         k8s-version:
+          - v1.31
           - v1.32
           - v1.33
           - v1.34

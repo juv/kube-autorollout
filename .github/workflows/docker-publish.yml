@@ -250,7 +250,7 @@ jobs:
         run: |
           export REGISTRY=${{ env.REGISTRY }}
           export IMAGE_NAME=${{ env.IMAGE_NAME }}
-          export E2E_TAG=${{ steps.build-test-image.outputs.E2E_TAG }}
+          export E2E_TAG=${{ env.E2E_TAG }}
           # Create a test deployment that kube-autorollout should monitor
           envsubst < tests/e2e/deployment-template.yaml > tests/e2e/deployment.yaml
           cat tests/e2e/deployment.yaml
@@ -266,7 +266,7 @@ jobs:
           INITIAL_GENERATION=$(kubectl get deployment test-app -o jsonpath='{.metadata.generation}')
           echo "Initial deployment generation: $INITIAL_GENERATION"
           
-          echo "INITIAL_GENERATION=$INITIAL_GENERATION" >> $GITHUB_ENV
+          echo "INITIAL_GENERATION=$INITIAL_GENERATION" >> $GITHUB_OUTPUT
 
       - name: Build and push changed test application image
         run: |
@@ -276,7 +276,7 @@ jobs:
           EOF
           
           # Build and push updated version
-          E2E_TAG=${{ steps.build-test-image.outputs.E2E_TAG }}
+          E2E_TAG=${{ env.E2E_TAG }}
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG test-app/
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG
           

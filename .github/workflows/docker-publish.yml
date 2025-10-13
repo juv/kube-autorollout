@@ -228,7 +228,7 @@ jobs:
           cat > test-app/Dockerfile << 'EOF'
           FROM nginx:alpine-slim
           COPY index.html /usr/share/nginx/html/
-          EXPOSE 80
+          EXPOSE 8080
           CMD ["nginx", "-g", "daemon off;"]
           EOF
           
@@ -252,32 +252,8 @@ jobs:
           IMAGE_NAME=${{ env.IMAGE_NAME }}
           E2E_TAG=${{ steps.build-test-image.outputs.E2E_TAG }}
           # Create a test deployment that kube-autorollout should monitor
-          kubectl apply -f - <<EOF
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: test-app
-            annotations:
-              kube-autorollout.io/enabled: "true"
-          spec:
-            replicas: 2
-            selector:
-              matchLabels:
-                app: test-app
-            template:
-              metadata:
-                labels:
-                  app: test-app
-              spec:
-                imagePullSecrets:
-                - name: ghcr-pull-secret
-                containers:
-                - name: test-app
-                  image: $REGISTRY/$IMAGE_NAME:$E2E_TAG
-                  ports:
-                  - containerPort: 80
-          EOF
-
+          envsubst < tests/e2e/deployment-template.yaml > tests/e2e/deployment.yaml
+          kubectl apply -f tests/e2e/deployment.yaml
       - name: Wait for test deployment to be ready
         id: wait-for-test-app
         run: |

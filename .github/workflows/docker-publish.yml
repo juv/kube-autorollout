@@ -248,9 +248,9 @@ jobs:
 
       - name: Create test deployment
         run: |
-          REGISTRY=${{ env.REGISTRY }}
-          IMAGE_NAME=${{ env.IMAGE_NAME }}
-          E2E_TAG=${{ steps.build-test-image.outputs.E2E_TAG }}
+          export REGISTRY=${{ env.REGISTRY }}
+          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          export E2E_TAG=${{ steps.build-test-image.outputs.E2E_TAG }}
           # Create a test deployment that kube-autorollout should monitor
           envsubst < tests/e2e/deployment-template.yaml > tests/e2e/deployment.yaml
           cat tests/e2e/deployment.yaml

@@ -19,5 +19,6 @@ spec:
       containers:
         - name: test-app
           image: ${REGISTRY}/${IMAGE_NAME}:${E2E_TAG}
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080

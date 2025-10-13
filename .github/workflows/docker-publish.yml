@@ -296,19 +296,19 @@ jobs:
           INITIAL_GENERATION=${{ steps.wait-for-test-app.outputs.INITIAL_GENERATION }}
           
           # Wait for generation to change (indicating a rollout was triggered)
-          for i in {1..60}; do
+          for i in {1..30}; do
             CURRENT_GENERATION=$(kubectl get deployment test-app -o jsonpath='{.metadata.generation}')
-            echo "Current generation: $CURRENT_GENERATION (attempt $i/60)"
+            echo "Current generation: $CURRENT_GENERATION (attempt $i/30)"
             
             if [ "$CURRENT_GENERATION" -gt "$INITIAL_GENERATION" ]; then
               echo "✅ Rollout detected! Generation changed from $INITIAL_GENERATION to $CURRENT_GENERATION"
-              kubectl logs -l app.kubernetes.io/name=kube-autorollout --tail=15
+              kubectl logs deployment/kube-autorollout --tail=15
               break
             fi
             
-            if [ $i -eq 60 ]; then
+            if [ $i -eq 30 ]; then
               echo "❌ Timeout waiting for rollout to be triggered"
-              kubectl logs -l app.kubernetes.io/name=kube-autorollout --tail=100
+              kubectl logs deployment/kube-autorollout --tail=100
               exit 1
             fi
             

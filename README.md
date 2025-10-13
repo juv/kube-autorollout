@@ -296,12 +296,12 @@ kube-autorollout contains **end-to-end tests** in the CI workflow for at least t
 Kubernetes. Essentially, a similar support coverage is provided as described in
 the [Kubernetes release version maintenance](https://kubernetes.io/releases/).
 
-| Kubernetes Version | Support Status | Test environment         |
-|:-------------------|:---------------|:-------------------------|
-| v1.31              | Supported ✔️   | k3d v5.8.3, k8s v1.31.13 |
-| v1.32              | Supported ✔️   | k3d v5.8.3, k8s v1.32.9  |
-| v1.33              | Supported ✔️   | k3d v5.8.3, k8s v1.33.5  |
-| v1.34              | Supported ✔️   | k3d v5.8.3, k8s v1.34.1  |
+| Kubernetes Version | Support Status | Test environment         | Registry |
+|:-------------------|:---------------|:-------------------------|:---------|
+| v1.31              | Supported ✔️   | k3d v5.8.3, k8s v1.31.13 | GHCR     |
+| v1.32              | Supported ✔️   | k3d v5.8.3, k8s v1.32.9  | GHCR     |
+| v1.33              | Supported ✔️   | k3d v5.8.3, k8s v1.33.5  | GHCR     |
+| v1.34              | Supported ✔️   | k3d v5.8.3, k8s v1.34.1  | GHCR     | 
 
 ## Deployment / security considerations
 

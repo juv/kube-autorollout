@@ -253,6 +253,7 @@ jobs:
           E2E_TAG=${{ steps.build-test-image.outputs.E2E_TAG }}
           # Create a test deployment that kube-autorollout should monitor
           envsubst < tests/e2e/deployment-template.yaml > tests/e2e/deployment.yaml
+          cat tests/e2e/deployment.yaml
           kubectl apply -f tests/e2e/deployment.yaml
       - name: Wait for test deployment to be ready
         id: wait-for-test-app
@@ -274,12 +275,12 @@ jobs:
           <html><body><h1>Test App v2</h1></body></html>
           EOF
           
-          # Build and push initial version
+          # Build and push updated version
           E2E_TAG=${{ steps.build-test-image.outputs.E2E_TAG }}
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG test-app/
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG
           
-          # Get initial digest
+          # Get updated digest
           UPDATED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
           
           # Verify digests are different

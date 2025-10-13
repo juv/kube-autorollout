@@ -89,6 +89,7 @@ jobs:
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
     outputs:
       tags: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build-and-push.outputs.digest }}
   update-release:
     needs: build
     if: github.event_name == 'release' && github.event.action == 'published'
@@ -202,9 +203,10 @@ jobs:
           done
 
       - name: Install kube-autorollout using Helm
-        run: |         
+        run: |
+          DIGEST="sha-${{ needs.build.outputs.digest }}"
           # Install kube-autorollout from Helm Chart 
-          helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set config.cronSchedule="*/10 * * * * *" --set image.tag=${{ github.sha }}
+          helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set config.cronSchedule="*/10 * * * * *" --set image.tag=$DIGEST
           
           # Wait for kube-autorollout controller to be ready
           kubectl get pods -l app.kubernetes.io/name=kube-autorollout          

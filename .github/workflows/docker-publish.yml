@@ -204,7 +204,7 @@ jobs:
 
       - name: Install kube-autorollout using Helm
         run: |
-          DIGEST="${{ needs.build.outputs.digest }}"
+          DIGEST="sha-${{ github.sha }}"
           # Install kube-autorollout from Helm Chart 
           helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set config.cronSchedule="*/10 * * * * *" --set image.tag=$DIGEST
           

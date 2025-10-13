@@ -32,16 +32,16 @@ jobs:
 
       - name: Install cosign
         if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+        uses: sigstore/cosign-installer@v3.5.0
         with:
           cosign-release: 'v2.2.4'
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+        uses: docker/setup-buildx-action@v3.0.0
 
       - name: Log into registry ${{ env.REGISTRY }}
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: docker/login-action@v3.0.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -49,7 +49,7 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
+        uses: docker/metadata-action@v5.0.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -58,7 +58,7 @@ jobs:
 
       - name: Build and push Docker image
         id: build-and-push
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@v5.0.0
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -66,26 +66,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Save image as artifact (PRs only)
-        if: github.event_name == 'pull_request'
-        run: |
-          mkdir -p image-tars
-          for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' '); do
-            IMAGE_ID=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "^$tag$" || true)
-            if [ -n "$IMAGE_ID" ]; then
-              SAFE_TAG=$(echo "$tag" | sed 's/[^a-zA-Z0-9_.-]/_/g')
-              docker save "$tag" -o "image-tars/$SAFE_TAG.tar"
-            fi
-          done
-        shell: bash
-
-      - name: Upload image tarballs (PRs only)
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: image-tars
-          path: image-tars/*.tar
 
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
@@ -189,52 +169,27 @@ jobs:
           kubectl get nodes
           kubectl wait --for=condition=ready nodes --all --timeout=60s
 
-      - name: Download image tarballs (PRs only)
-        if: github.event_name == 'pull_request'
-        uses: actions/download-artifact@v4
-        with:
-          name: image-tars
-
-      - name: Load and import images to k3d (PRs only)
-        if: github.event_name == 'pull_request'
-        run: |
-          for tar in image-tars/*.tar; do
-            docker load -i "$tar"
-          done
-          # Import each tag we know we built (from build job output)
-          for tag in $(echo "${{ needs.build.outputs.tags }}" | tr '\n' ' '); do
-            k3d image import "$tag" --cluster kube-autorollout-e2e || true
-          done
-
       - name: Log into GHCR
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: docker/login-action@v3.0.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull built image(s)
-        if: github.event_name != 'pull_request'
         run: |
           for tag in $(echo "${{ needs.build.outputs.tags }}" | tr '\n' ' '); do
             docker pull "$tag"
           done
 
       - name: Import built image to k3d (push/release only)
-        if: github.event_name != 'pull_request'
         run: |
           for tag in $(echo "${{ needs.build.outputs.tags }}" | tr '\n' ' '); do
             k3d image import "$tag" --cluster kube-autorollout-e2e || true
           done
 
       - name: Install kube-autorollout using Helm
-        run: |
-          # Import kube-autorollout image to k3d cluster
-          for tag in $(echo "${{ needs.build.outputs.tags }}" | tr '\n' ' '); do
-            k3d image import "$tag" --cluster kube-autorollout-e2e || true
-          done
-          
+        run: |         
           # Install kube-autorollout from Helm Chart 
           helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set config.cronSchedule="*/10 * * * * *" --set image.tag=${{ github.sha }}
           
@@ -337,7 +292,7 @@ jobs:
           UPDATED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
           
           # Verify digests are different
-          if [ "$INITIAL_DIGEST" = "$NEW_DIGEST" ]; then
+          if [ "$INITIAL_DIGEST" = "$UPDATED_DIGEST" ]; then
           echo "ERROR: Digests should be different but are the same!"
           exit 1
           fi        

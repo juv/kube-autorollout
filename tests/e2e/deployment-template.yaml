@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app
+  labels:
+    kube-autorollout/enabled: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-app
+  template:
+    metadata:
+      labels:
+        app: test-app
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: test-app
+          image: ${REGISTRY}/${IMAGE_NAME}:${E2E_TAG}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080

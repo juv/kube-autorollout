@@ -290,6 +290,19 @@ rules:
 Other registries are untested but likely work in some combination as long as they follow the
 the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md).
 
+## Supported Kubernetes versions
+
+kube-autorollout contains **end-to-end tests** in the CI workflow for at least the most recent three minor releases of
+Kubernetes. Essentially, a similar support coverage is provided as described in
+the [Kubernetes release version maintenance](https://kubernetes.io/releases/).
+
+| Kubernetes Version | Support Status | Test environment         | Registry |
+|:-------------------|:---------------|:-------------------------|:---------|
+| v1.31              | Supported ✔️   | k3d v5.8.3, k8s v1.31.13 | GHCR     |
+| v1.32              | Supported ✔️   | k3d v5.8.3, k8s v1.32.9  | GHCR     |
+| v1.33              | Supported ✔️   | k3d v5.8.3, k8s v1.33.5  | GHCR     |
+| v1.34              | Supported ✔️   | k3d v5.8.3, k8s v1.34.1  | GHCR     | 
+
 ## Deployment / security considerations
 
 - Continue using SemVer tags for _production environments_. If you choose to use kube-autorollout in those environments,

@@ -32,16 +32,16 @@ jobs:
 
       - name: Install cosign
         if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+        uses: sigstore/cosign-installer@v3.5.0
         with:
           cosign-release: 'v2.2.4'
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+        uses: docker/setup-buildx-action@v3.0.0
 
       - name: Log into registry ${{ env.REGISTRY }}
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: docker/login-action@v3.0.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -49,13 +49,15 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
+        uses: docker/metadata-action@v5.0.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=long
 
       - name: Build and push Docker image
         id: build-and-push
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@v5.0.0
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -63,6 +65,14 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          outputs: type=docker,dest=${{ runner.temp }}/image.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: ${{ runner.temp }}/image.tar
+          retention-days: 1
 
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
@@ -77,6 +87,9 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build-and-push.outputs.digest }}
   update-release:
     needs: build
     if: github.event_name == 'release' && github.event.action == 'published'
@@ -132,3 +145,179 @@ jobs:
                 body: body
               });
             }
+  # End-to-End testing with multiple Kubernetes versions
+  e2e-test:
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        k8s-version:
+          - v1.31
+          - v1.32
+          - v1.33
+          - v1.34
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up k3d cluster
+        uses: nolar/setup-k3d-k3s@v1
+        with:
+          version: ${{ matrix.k8s-version }}
+          k3d-name: kube-autorollout-e2e
+          k3d-args: >-
+            --no-lb
+            --no-rollback
+            --k3s-arg --disable=traefik,servicelb,metrics-server@server:*
+
+      - name: Verify cluster is ready
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+          kubectl wait --for=condition=ready nodes --all --timeout=60s
+
+      - name: Log into GHCR
+        uses: docker/login-action@v3.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: image
+          path: ${{ runner.temp }}
+
+      - name: Load image
+        run: |
+          docker load --input ${{ runner.temp }}/image.tar
+          docker image ls -a
+          
+          IMAGES=$(docker image ls --format '{{.Repository}}:{{.Tag}}' | grep "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}")
+      
+          for img in $IMAGES; do
+            echo "Importing $img into k3d cluster"
+            k3d image import "$img" --cluster kube-autorollout-e2e
+          done
+
+      - name: Install kube-autorollout using Helm
+        run: |
+          DIGEST="sha-${{ github.sha }}"
+          # Install kube-autorollout from Helm Chart 
+          helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set config.cronSchedule="*/10 * * * * *" --set image.tag=$DIGEST
+          
+          # Wait for kube-autorollout controller to be ready
+          kubectl get pods -l app.kubernetes.io/name=kube-autorollout          
+          kubectl wait --for=condition=available deployment/kube-autorollout --timeout=30s
+          kubectl logs deployment/kube-autorollout --tail=50
+          
+      - name: Create GHCR image pull secret in k3d cluster
+        run: |
+          kubectl create secret docker-registry ghcr-pull-secret \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push initial test application image
+        id: build-test-image
+        run: |
+          # Create a simple test application
+          mkdir -p test-app
+          cat > test-app/Dockerfile << 'EOF'
+          FROM nginx:alpine-slim
+          COPY index.html /usr/share/nginx/html/
+          EXPOSE 8080
+          CMD ["nginx", "-g", "daemon off;"]
+          EOF
+          
+          cat > test-app/index.html << 'EOF'
+          <html><body><h1>Test App v1</h1></body></html>
+          EOF
+          
+          # Build and push initial version
+          E2E_TAG=e2e-test-app-k8s-${{ matrix.k8s-version }}
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG test-app/
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG
+          
+          # Get initial digest
+          INITIAL_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
+          echo "INITIAL_DIGEST=$INITIAL_DIGEST" >> $GITHUB_ENV
+          echo "E2E_TAG=$E2E_TAG" >> $GITHUB_ENV
+
+      - name: Create test deployment
+        run: |
+          export REGISTRY=${{ env.REGISTRY }}
+          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          export E2E_TAG=${{ env.E2E_TAG }}
+          # Create a test deployment that kube-autorollout should monitor
+          envsubst < tests/e2e/deployment-template.yaml > tests/e2e/deployment.yaml
+          cat tests/e2e/deployment.yaml
+          kubectl apply -f tests/e2e/deployment.yaml
+      - name: Wait for test deployment to be ready
+        id: wait-for-test-app
+        run: |
+          kubectl wait --for=condition=available deployment/test-app --timeout=60s
+          
+          kubectl get deployment test-app -o wide
+          
+          # Get initial generation
+          INITIAL_GENERATION=$(kubectl get deployment test-app -o jsonpath='{.metadata.generation}')
+          echo "Initial deployment generation: $INITIAL_GENERATION"
+          
+          echo "INITIAL_GENERATION=$INITIAL_GENERATION" >> $GITHUB_OUTPUT
+
+      - name: Build and push changed test application image
+        run: |
+          # Change output of index.html to trigger a "change" in the image
+          cat > test-app/index.html << 'EOF'
+          <html><body><h1>Test App v2</h1></body></html>
+          EOF
+          
+          # Build and push updated version
+          E2E_TAG=${{ env.E2E_TAG }}
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG test-app/
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG
+          
+          # Get updated digest
+          UPDATED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
+          
+          # Verify digests are different
+          if [ "$INITIAL_DIGEST" = "$UPDATED_DIGEST" ]; then
+          echo "ERROR: Digests should be different but are the same!"
+          exit 1
+          fi        
+        
+          echo "UPDATED_DIGEST=$UPDATED_DIGEST" >> $GITHUB_ENV
+
+      - name: Confirm kube-autorollout works :-)
+        run: |
+          INITIAL_GENERATION=${{ steps.wait-for-test-app.outputs.INITIAL_GENERATION }}
+          
+          # Wait for generation to change (indicating a rollout was triggered)
+          for i in {1..30}; do
+            CURRENT_GENERATION=$(kubectl get deployment test-app -o jsonpath='{.metadata.generation}')
+            echo "Current generation: $CURRENT_GENERATION (attempt $i/30)"
+            
+            if [ "$CURRENT_GENERATION" -gt "$INITIAL_GENERATION" ]; then
+              echo "✅ Rollout detected! Generation changed from $INITIAL_GENERATION to $CURRENT_GENERATION"
+              kubectl logs deployment/kube-autorollout --tail=15
+              break
+            fi
+            
+            if [ $i -eq 30 ]; then
+              echo "❌ Timeout waiting for rollout to be triggered"
+              kubectl logs deployment/kube-autorollout --tail=100
+              exit 1
+            fi
+            
+            sleep 5
+          done
+
+      - name: ghcr.io cleanup
+        if: always() && env.E2E_TAG != ''
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          delete-tags: ${{ env.E2E_TAG }}

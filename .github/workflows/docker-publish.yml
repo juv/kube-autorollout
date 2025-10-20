@@ -14,7 +14,7 @@ env:
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
-  E2E_IMAGE_NAME: ${{ github.repository }}/tests/kube-autorollout-e2e-test-image
+  E2E_IMAGE_NAME: ${{ github.repository }}/tests/e2e-image
 
 
 jobs:
@@ -325,4 +325,5 @@ jobs:
       - name: ghcr.io cleanup
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
+          packages: ${{ env.E2E_IMAGE_NAME }}
           delete-tags: "e2e-test-app-k8s-*"

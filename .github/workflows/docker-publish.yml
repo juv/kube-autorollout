@@ -157,6 +157,8 @@ jobs:
           - v1.32
           - v1.33
           - v1.34
+    permissions:
+      packages: write
 
     steps:
       - name: Checkout repository

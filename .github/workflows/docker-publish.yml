@@ -207,7 +207,7 @@ jobs:
         run: |
           DIGEST="sha-${{ github.sha }}"
           # Install kube-autorollout from Helm Chart 
-          helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=30s --set config.cronSchedule="*/10 * * * * *" --set image.tag=$DIGEST
+          helm install kube-autorollout ./charts/kube-autorollout --wait --timeout=60s --set config.cronSchedule="*/10 * * * * *" --set image.tag=$DIGEST
           
           # Wait for kube-autorollout controller to be ready
           kubectl get pods -l app.kubernetes.io/name=kube-autorollout          
@@ -315,9 +315,11 @@ jobs:
             
             sleep 5
           done
-
+  cleanup-e2e-tags:
+    runs-on: ubuntu-latest
+    needs: e2e-test
+    steps:
       - name: ghcr.io cleanup
-        if: always() && env.E2E_TAG != ''
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          delete-tags: ${{ env.E2E_TAG }}
+          delete-tags: "e2e-test-app-k8s-*"

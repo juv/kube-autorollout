@@ -14,6 +14,7 @@ env:
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
+  E2E_IMAGE_NAME: ${{ github.repository }}/tests/kube-autorollout-e2e-test-image
 
 
 jobs:
@@ -241,18 +242,18 @@ jobs:
           
           # Build and push initial version
           E2E_TAG=e2e-test-app-k8s-${{ matrix.k8s-version }}
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG test-app/
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG
+          docker build -t ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG test-app/
+          docker push ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG
           
           # Get initial digest
-          INITIAL_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
+          INITIAL_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
           echo "INITIAL_DIGEST=$INITIAL_DIGEST" >> $GITHUB_ENV
           echo "E2E_TAG=$E2E_TAG" >> $GITHUB_ENV
 
       - name: Create test deployment
         run: |
           export REGISTRY=${{ env.REGISTRY }}
-          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          export IMAGE_NAME=${{ env.E2E_IMAGE_NAME }}
           export E2E_TAG=${{ env.E2E_TAG }}
           # Create a test deployment that kube-autorollout should monitor
           envsubst < tests/e2e/deployment-template.yaml > tests/e2e/deployment.yaml
@@ -280,11 +281,11 @@ jobs:
           
           # Build and push updated version
           E2E_TAG=${{ env.E2E_TAG }}
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG test-app/
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG
+          docker build -t ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG test-app/
+          docker push ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG
           
           # Get updated digest
-          UPDATED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
+          UPDATED_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
           
           # Verify digests are different
           if [ "$INITIAL_DIGEST" = "$UPDATED_DIGEST" ]; then

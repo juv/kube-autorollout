@@ -323,4 +323,3 @@ jobs:
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           delete-tags: "e2e-test-app-k8s-*"
-          dry-run: true

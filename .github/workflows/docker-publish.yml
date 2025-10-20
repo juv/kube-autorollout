@@ -15,7 +15,7 @@ env:
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
   E2E_PACKAGE_NAME: "tests/kube-autorollout-e2e-image"
-  E2E_IMAGE: ${{ github.repository_owner }}/tests/kube-autorollout-e2e-image
+  E2E_IMAGE_NAME: ${{ github.repository_owner }}/tests/kube-autorollout-e2e-image
 
 
 jobs:

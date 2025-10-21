@@ -328,3 +328,4 @@ jobs:
         with:
           packages: ${{ env.E2E_PACKAGE_NAME }}
           delete-tags: "e2e-test-app-k8s-*"
+          token: ${{ secrets.GITHUB_TOKEN }}

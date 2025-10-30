@@ -242,7 +242,7 @@ jobs:
           EOF
           
           # Build and push initial version
-          E2E_TAG=e2e-test-app-k8s-${{ matrix.k8s-version }}
+          E2E_TAG=e2e-test-app-k8s-${{ matrix.k8s-version }}-pr-${{ github.event.pull_request.number }}
           docker build -t ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG test-app/
           docker push ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG
           
@@ -324,6 +324,7 @@ jobs:
     needs: e2e-test
     steps:
       - name: ghcr.io cleanup
+        if: github.actor != 'dependabot[bot]'
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           packages: ${{ env.E2E_PACKAGE_NAME }}

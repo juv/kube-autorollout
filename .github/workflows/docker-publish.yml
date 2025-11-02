@@ -226,6 +226,20 @@ jobs:
             --docker-username=${{ github.actor }} \
             --docker-password=${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set E2E tag
+        id: e2e-tag
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            TAG_SUFFIX="pr-${{ github.event.pull_request.number }}"
+          elif [ "${{ github.ref_type }}" == "tag" ]; then
+            TAG_SUFFIX="release-${{ github.ref_name }}"
+          else
+            TAG_SUFFIX="branch-${{ github.ref_name }}"
+          fi
+          E2E_TAG="e2e-test-app-k8s-${{ matrix.k8s-version }}-${TAG_SUFFIX}"
+          echo "E2E_TAG=$E2E_TAG" >> $GITHUB_ENV
+          echo "Generated E2E tag: ${E2E_TAG}"
+
       - name: Build and push initial test application image
         id: build-test-image
         run: |
@@ -243,14 +257,13 @@ jobs:
           EOF
           
           # Build and push initial version
-          E2E_TAG=e2e-test-app-k8s-${{ matrix.k8s-version }}-pr-${{ github.event.pull_request.number }}
+          E2E_TAG=${{ env.E2E_TAG }}
           docker build -t ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG test-app/
           docker push ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG
           
           # Get initial digest
           INITIAL_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.E2E_IMAGE_NAME }}:$E2E_TAG | cut -d'@' -f2)
           echo "INITIAL_DIGEST=$INITIAL_DIGEST" >> $GITHUB_ENV
-          echo "E2E_TAG=$E2E_TAG" >> $GITHUB_ENV
 
       - name: Create test deployment
         run: |

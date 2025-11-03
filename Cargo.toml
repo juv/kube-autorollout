@@ -20,7 +20,7 @@ mimalloc = "0.1.43"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-tokio-cron-scheduler = { version = "0.15.0", features = ["signal"] }
+tokio-cron-scheduler = { version = "0.15.1", features = ["signal"] }
 tokio-util = { version = "0.7.16" }
 axum = "0.8.6"
 kube = { version = "2.0.1", features = ["runtime", "derive"] }

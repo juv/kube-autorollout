@@ -11,8 +11,7 @@ use std::collections::HashMap;
 use std::fs;
 use tracing::{debug, info};
 
-static OCI_ACCEPT_HEADER: &str =
-    "application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json";
+static OCI_ACCEPT_HEADER: &str = "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json";
 
 #[derive(Deserialize)]
 struct RegistryTokenResponse {

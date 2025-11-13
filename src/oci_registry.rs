@@ -95,7 +95,7 @@ pub async fn fetch_digest_from_tag(
 
         StatusCode::NOT_FOUND => {
             if enable_jfrog_artifactory_fallback && is_artifactory_response(&response.headers()) {
-                let fallback_url = get_artifactory_fallback_url(image_reference, registry);
+                let fallback_url = get_artifactory_fallback_url(image_reference, registry)?;
                 info!(
                     "Received http status {} previously, fetching digest from Artifactory fallback url {}",
                     response.status(),
@@ -154,15 +154,22 @@ async fn fetch_docker_manifest(
     Ok(response)
 }
 
-fn get_artifactory_fallback_url(image_reference: &ImageReference, registry: &str) -> String {
-    let repository_name = image_reference.repository.split('/').next().unwrap();
+fn get_artifactory_fallback_url(
+    image_reference: &ImageReference,
+    registry: &str,
+) -> Result<String> {
+    let mut repository_parts = image_reference.repository.split('/');
+    let repository = repository_parts
+        .next()
+        .context("Repository name is missing")?;
+    let image = repository_parts.next().context("Image name is missing")?;
     // Create URL according to JFrog Artifactory's Repository Path Method (https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker)
     let fallback_url = format!(
         "https://{}/artifactory/api/docker/{}/v2/{}/manifests/{}",
-        registry, repository_name, image_reference.repository, image_reference.tag
+        registry, repository, image, image_reference.tag
     );
 
-    fallback_url
+    Ok(fallback_url)
 }
 
 fn get_digest_from_response(response: &Response) -> Result<String> {

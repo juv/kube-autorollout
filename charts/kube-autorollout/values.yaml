@@ -57,7 +57,7 @@ image:
   # -- Image pull policy for the container image
   pullPolicy: IfNotPresent
   # -- Image tag to use for the container image. Overrides the image tag whose default is the chart appVersion.
-  tag: "v0.4.2"
+  tag: "v0.4.3"
 
 # -- Kubernetes RBAC configuration
 rbac:

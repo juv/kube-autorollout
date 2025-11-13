@@ -1,6 +1,6 @@
 # kube-autorollout
 
-![Version: 0.6.0](https://img.shields.io/badge/Version-0.6.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.4.0](https://img.shields.io/badge/AppVersion-0.4.0-informational?style=flat-square)
+![Version: 0.7.1](https://img.shields.io/badge/Version-0.7.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.4.3](https://img.shields.io/badge/AppVersion-0.4.3-informational?style=flat-square)
 
 A Helm chart for kube-autorollout
 
@@ -12,6 +12,7 @@ A Helm chart for kube-autorollout
 | config.cronSchedule | string | `"*/45 * * * * *"` | The cron schedule to execute the main controller code, given in a format supported by Croner: https://github.com/Hexagon/croner-rust?tab=readme-ov-file#pattern. Default: "*/45 * * * * *" to execute every 45 seconds |
 | config.featureFlags.enableJfrogArtifactoryFallback | bool | `false` | Enable JFrog Artifactory fallback when the Artifactory is configured to use the Repository Path Method (https://jfrog.com/help/r/jfrog-artifactory-documentation/the-repository-path-method-for-docker) |
 | config.featureFlags.enableKubectlAnnotation | bool | `false` | Change the kube-autorollout patch annotation key (that triggers the redeployment) from "kube-autorollout/restartedAt" to "kubectl.kubernetes.io/restartedAt". The latter annotation is applied by kubectl when executing the command "kubectl rollout restart". Most GitOps tools like ArgoCD and FluxCD ignore the kubectl annotation from state drift detection. If you are not using this value on "true" you might need to add further configuration to ArgoCD and FluxCD to not show the kube-autorollout annotation as a state drift. |
+| config.logLevel | string | `"info"` | Changes the log level of the application. Allowed values: trace, debug, info, warn, error |
 | config.registries | list | `[]` | Container registries |
 | config.tls | object | `{"customCaCertificates":{"enabled":false,"secrets":[{"mountPath":null,"name":null,"subPath":null}]}}` | TLS configuration |
 | config.tls.customCaCertificates | object | `{"enabled":false,"secrets":[{"mountPath":null,"name":null,"subPath":null}]}` | Custom CA certificates to use within kube-autorollout for verifying TLS connections to registries which present a certificate signed by a non-public CA |
@@ -24,7 +25,7 @@ A Helm chart for kube-autorollout
 | fullnameOverride | string | `""` | String to fully override `"kube-autorollout.fullname"` |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for the container image |
 | image.repository | string | `"ghcr.io/juv/kube-autorollout"` | The image repository name to use for the container image |
-| image.tag | string | `"v0.4.0"` | Image tag to use for the container image. Overrides the image tag whose default is the chart appVersion. |
+| image.tag | string | `"v0.4.3"` | Image tag to use for the container image. Overrides the image tag whose default is the chart appVersion. |
 | imagePullSecrets | list | `[]` | Secrets with credentials to pull images from a private registry. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/ |
 | livenessProbe | object | `{"httpGet":{"path":"/health/live","port":"http"}}` | Liveness probe for the kube-autorollout controller. More information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/ |
 | nameOverride | string | `""` | Override to the chart name |

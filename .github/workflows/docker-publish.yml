@@ -237,8 +237,10 @@ jobs:
             TAG_SUFFIX="branch-${{ github.ref_name }}"
           fi
           E2E_TAG="e2e-test-app-k8s-${{ matrix.k8s-version }}-${TAG_SUFFIX}"
+          E2E_TAG_WILDCARD="e2e-test-app-k8s-*-${TAG_SUFFIX}"
           echo "E2E_TAG=$E2E_TAG" >> $GITHUB_ENV
-          echo "Generated E2E tag: ${E2E_TAG}"
+          echo "E2E_TAG_WILDCARD=$E2E_TAG_WILDCARD" >> $GITHUB_ENV
+          echo "Generated E2E_TAG: ${E2E_TAG}, E2E_TAG_WILDCARD: ${E2E_TAG_WILDCARD}"
 
       - name: Build and push initial test application image
         id: build-test-image
@@ -342,5 +344,5 @@ jobs:
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           packages: ${{ env.E2E_PACKAGE_NAME }}
-          delete-tags: "e2e-test-app-k8s-*"
+          delete-tags: ${{ env.E2E_TAG_WILDCARD }}
           token: ${{ secrets.GITHUB_TOKEN }}

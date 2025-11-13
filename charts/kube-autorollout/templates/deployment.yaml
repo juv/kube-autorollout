@@ -40,6 +40,8 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            - name: RUST_LOG
+              value: {{ .Values.config.logLevel }}
             - name: CONFIG_FILE
               {{- $configDirectory := "/opt/app/kube-autorollout/config" }}
               value: {{ $configDirectory }}/config.yaml

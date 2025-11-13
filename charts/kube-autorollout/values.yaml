@@ -4,6 +4,8 @@
 replicaCount: 1
 
 config:
+  # -- Changes the log level of the application. Allowed values: trace, debug, info, warn, error
+  logLevel: info
   # -- The cron schedule to execute the main controller code, given in a format supported by Croner: https://github.com/Hexagon/croner-rust?tab=readme-ov-file#pattern. Default: "*/45 * * * * *" to execute every 45 seconds
   cronSchedule: "*/45 * * * * *"
   # -- Webserver configuration
@@ -55,7 +57,7 @@ image:
   # -- Image pull policy for the container image
   pullPolicy: IfNotPresent
   # -- Image tag to use for the container image. Overrides the image tag whose default is the chart appVersion.
-  tag: "v0.4.0"
+  tag: "v0.4.2"
 
 # -- Kubernetes RBAC configuration
 rbac:

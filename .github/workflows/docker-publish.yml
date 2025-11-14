@@ -152,6 +152,8 @@ jobs:
   e2e-test:
     runs-on: ubuntu-latest
     needs: build
+    outputs:
+      E2E_TAG_WILDCARD: ${{ steps.e2e-tag.outputs.E2E_TAG_WILDCARD }}
     strategy:
       fail-fast: false
       matrix:
@@ -239,7 +241,7 @@ jobs:
           E2E_TAG="e2e-test-app-k8s-${{ matrix.k8s-version }}-${TAG_SUFFIX}"
           E2E_TAG_WILDCARD="e2e-test-app-k8s-*-${TAG_SUFFIX}"
           echo "E2E_TAG=$E2E_TAG" >> $GITHUB_ENV
-          echo "E2E_TAG_WILDCARD=$E2E_TAG_WILDCARD" >> $GITHUB_ENV
+          echo "E2E_TAG_WILDCARD=$E2E_TAG_WILDCARD" >> $GITHUB_OUTPUT
           echo "Generated E2E_TAG: ${E2E_TAG}, E2E_TAG_WILDCARD: ${E2E_TAG_WILDCARD}"
 
       - name: Build and push initial test application image
@@ -344,5 +346,5 @@ jobs:
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           packages: ${{ env.E2E_PACKAGE_NAME }}
-          delete-tags: ${{ env.E2E_TAG_WILDCARD }}
+          delete-tags: ${{ needs.e2e-test.outputs.E2E_TAG_WILDCARD }}
           token: ${{ secrets.GITHUB_TOKEN }}

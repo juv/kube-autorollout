@@ -298,10 +298,10 @@ the [Kubernetes release version maintenance](https://kubernetes.io/releases/).
 
 | Kubernetes Version | Support Status | Test environment         | Registry |
 |:-------------------|:---------------|:-------------------------|:---------|
-| v1.31              | Supported ✔️   | k3d v5.8.3, k8s v1.31.13 | GHCR     |
-| v1.32              | Supported ✔️   | k3d v5.8.3, k8s v1.32.9  | GHCR     |
-| v1.33              | Supported ✔️   | k3d v5.8.3, k8s v1.33.5  | GHCR     |
-| v1.34              | Supported ✔️   | k3d v5.8.3, k8s v1.34.1  | GHCR     | 
+| v1.32              | Supported ✔️   | k3d v5.8.3, k8s v1.32.13 | GHCR     |
+| v1.33              | Supported ✔️   | k3d v5.8.3, k8s v1.33.9  | GHCR     |
+| v1.34              | Supported ✔️   | k3d v5.8.3, k8s v1.34.5  | GHCR     |
+| v1.35              | Supported ✔️   | k3d v5.8.3, k8s v1.35.2  | GHCR     |
 
 ## Deployment / security considerations
 

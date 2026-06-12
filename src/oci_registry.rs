@@ -4,7 +4,7 @@ use crate::image_reference::ImageReference;
 use crate::secret_string::SecretString;
 use anyhow::{bail, Context, Result};
 use axum::http::{HeaderMap, StatusCode};
-use reqwest::header::{ACCEPT, AUTHORIZATION, WWW_AUTHENTICATE};
+use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, WWW_AUTHENTICATE};
 use reqwest::{Certificate, Client, Response};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -24,6 +24,7 @@ struct OciIndexManifest {
     digest: String,
 }
 
+/// OCI_IMAGE_INDEX_CONTENT_TYPE and DOCKER_DISTRIBUTION_INDEX_CONTENT_TYPE share the same content structure
 #[derive(Deserialize)]
 struct OciIndexResponse {
     manifests: Vec<OciIndexManifest>,
@@ -220,21 +221,34 @@ fn parse_manifest_digest_from_response(response: &Response) -> Result<String> {
 }
 
 async fn parse_manifest_index_from_response(response: Response) -> Result<Vec<String>> {
+    let top_level_digest = parse_manifest_digest_from_response(&response)?;
     let digests: OciIndexResponse = response
         .json()
         .await
         .context("Failed to parse OCI index response")?;
-    Ok(digests.manifests.iter().map(|m| m.digest.clone()).collect())
+
+    let mut digests: Vec<String> = digests.manifests.iter().map(|m| m.digest.clone()).collect();
+    digests.push(top_level_digest);
+
+    Ok(digests)
 }
 
 fn get_content_type_from_response(response: &Response) -> Result<String> {
-    Ok(response
+    let raw_content_type = response
         .headers()
-        .get("Content-Type")
+        .get(CONTENT_TYPE)
         .context("Response does not contain Content-Type")?
         .to_str()
-        .context("Content-Type is not a string")?
-        .to_owned())
+        .context("Content-Type is not a string")?;
+
+    let media_type = raw_content_type
+        .split(';')
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .context("Content-Type header is empty")?;
+
+    Ok(media_type.to_owned())
 }
 
 fn rewrite_docker_io_registry_target(registry: &str) -> &str {

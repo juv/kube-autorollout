@@ -2,7 +2,7 @@ use crate::config::RegistrySecret::{ImagePullSecret, Opaque};
 use crate::config::{Config, RegistrySecret};
 use crate::image_reference::ImageReference;
 use crate::secret_string::SecretString;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use axum::http::{HeaderMap, StatusCode};
 use reqwest::header::{ACCEPT, AUTHORIZATION, WWW_AUTHENTICATE};
 use reqwest::{Certificate, Client, Response};
@@ -11,7 +11,23 @@ use std::collections::HashMap;
 use std::fs;
 use tracing::{debug, info};
 
-static OCI_ACCEPT_HEADER: &str = "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json";
+const OCI_ACCEPT_HEADER: &str = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json";
+const OCI_IMAGE_MANIFEST_CONTENT_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
+const OCI_IMAGE_INDEX_CONTENT_TYPE: &str = "application/vnd.oci.image.index.v1+json";
+const DOCKER_DISTRIBUTION_MANIFEST_CONTENT_TYPE: &str =
+    "application/vnd.docker.distribution.manifest.v2+json";
+const DOCKER_DISTRIBUTION_INDEX_CONTENT_TYPE: &str =
+    "application/vnd.docker.distribution.manifest.list.v2+json";
+
+#[derive(Deserialize)]
+struct OciIndexManifest {
+    digest: String,
+}
+
+#[derive(Deserialize)]
+struct OciIndexResponse {
+    manifests: Vec<OciIndexManifest>,
+}
 
 #[derive(Deserialize)]
 struct RegistryTokenResponse {
@@ -39,12 +55,12 @@ pub fn create_client(config: &Config) -> Result<Client> {
         .context("Failed to build HTTP client")?)
 }
 
-pub async fn fetch_digest_from_tag(
+pub async fn fetch_digests_from_tag(
     image_reference: &ImageReference,
     registry_secret: &RegistrySecret,
     client: &Client,
     enable_jfrog_artifactory_fallback: bool,
-) -> Result<String> {
+) -> Result<Vec<String>> {
     let registry = rewrite_docker_io_registry_target(&image_reference.registry);
     let url = format!(
         "https://{}/v2/{}/manifests/{}",
@@ -57,7 +73,7 @@ pub async fn fetch_digest_from_tag(
 
     match response.status() {
         StatusCode::OK => {
-            let digest = get_digest_from_response(&response)?;
+            let digest = get_digests_from_response(response).await?;
             return Ok(digest);
         }
 
@@ -87,7 +103,7 @@ pub async fn fetch_digest_from_tag(
 
                 debug!("Authentication challenge response: {:?}", response);
 
-                let digest = get_digest_from_response(&response)?;
+                let digest = get_digests_from_response(response).await?;
                 return Ok(digest);
             }
         }
@@ -110,13 +126,13 @@ pub async fn fetch_digest_from_tag(
                         )
                     })?;
 
-                let digest = get_digest_from_response(&response)?;
+                let digest = get_digests_from_response(response).await?;
                 return Ok(digest);
             }
         }
 
         status => {
-            anyhow::bail!(
+            bail!(
                 "Registry {} returned error status {} while fetching OCI image manifest",
                 image_reference.registry,
                 status
@@ -124,7 +140,7 @@ pub async fn fetch_digest_from_tag(
         }
     }
 
-    anyhow::bail!(
+    bail!(
         "Failed to fetch digest from registry's {} metadata endpoint",
         registry
     );
@@ -171,13 +187,53 @@ fn get_artifactory_fallback_url(
     Ok(fallback_url)
 }
 
-fn get_digest_from_response(response: &Response) -> Result<String> {
+async fn get_digests_from_response(response: Response) -> Result<Vec<String>> {
+    let content_type = get_content_type_from_response(&response)?;
+    let digests = match content_type.as_str() {
+        OCI_IMAGE_MANIFEST_CONTENT_TYPE | DOCKER_DISTRIBUTION_MANIFEST_CONTENT_TYPE => {
+            vec![parse_manifest_digest_from_response(&response)?]
+        }
+        OCI_IMAGE_INDEX_CONTENT_TYPE | DOCKER_DISTRIBUTION_INDEX_CONTENT_TYPE => {
+            parse_manifest_index_from_response(response).await?
+        }
+        _ => bail!("Unknown content type '{}'", content_type),
+    };
+
+    if digests.is_empty() {
+        bail!(
+            "Parsed digests for content type {} are empty",
+            &content_type
+        );
+    }
+
+    Ok(digests)
+}
+
+fn parse_manifest_digest_from_response(response: &Response) -> Result<String> {
     Ok(response
         .headers()
         .get("Docker-Content-Digest")
         .context("Response does not contain HTTP header Docker-Content-Digest")?
         .to_str()
         .context("Received invalid UTF-8 content in Docker-Content-Digest header")?
+        .to_owned())
+}
+
+async fn parse_manifest_index_from_response(response: Response) -> Result<Vec<String>> {
+    let digests: OciIndexResponse = response
+        .json()
+        .await
+        .context("Failed to parse OCI index response")?;
+    Ok(digests.manifests.iter().map(|m| m.digest.clone()).collect())
+}
+
+fn get_content_type_from_response(response: &Response) -> Result<String> {
+    Ok(response
+        .headers()
+        .get("Content-Type")
+        .context("Response does not contain Content-Type")?
+        .to_str()
+        .context("Content-Type is not a string")?
         .to_owned())
 }
 
@@ -279,7 +335,7 @@ async fn handle_oauth_authentication_challenge(
         }
 
         status => {
-            anyhow::bail!(
+            bail!(
                 "Failed to retrieve OAuth authentication token from {}, error code {}",
                 realm,
                 status

@@ -16,7 +16,7 @@ lto = true             # https://doc.rust-lang.org/cargo/reference/profiles.html
 strip = "symbols"      # https://doc.rust-lang.org/cargo/reference/profiles.html#strip
 
 [target.'cfg(target_env = "musl")'.dependencies]
-mimalloc = "0.1.50"
+mimalloc = "0.1.52"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

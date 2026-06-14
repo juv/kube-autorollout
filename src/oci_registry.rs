@@ -2,16 +2,33 @@ use crate::config::RegistrySecret::{ImagePullSecret, Opaque};
 use crate::config::{Config, RegistrySecret};
 use crate::image_reference::ImageReference;
 use crate::secret_string::SecretString;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use axum::http::{HeaderMap, StatusCode};
-use reqwest::header::{ACCEPT, AUTHORIZATION, WWW_AUTHENTICATE};
+use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, WWW_AUTHENTICATE};
 use reqwest::{Certificate, Client, Response};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use tracing::{debug, info};
 
-static OCI_ACCEPT_HEADER: &str = "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json";
+const OCI_ACCEPT_HEADER: &str = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json";
+const OCI_IMAGE_MANIFEST_CONTENT_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
+const OCI_IMAGE_INDEX_CONTENT_TYPE: &str = "application/vnd.oci.image.index.v1+json";
+const DOCKER_DISTRIBUTION_MANIFEST_CONTENT_TYPE: &str =
+    "application/vnd.docker.distribution.manifest.v2+json";
+const DOCKER_DISTRIBUTION_INDEX_CONTENT_TYPE: &str =
+    "application/vnd.docker.distribution.manifest.list.v2+json";
+
+#[derive(Deserialize)]
+struct OciIndexManifest {
+    digest: String,
+}
+
+/// OCI_IMAGE_INDEX_CONTENT_TYPE and DOCKER_DISTRIBUTION_INDEX_CONTENT_TYPE share the same content structure
+#[derive(Deserialize)]
+struct OciIndexResponse {
+    manifests: Vec<OciIndexManifest>,
+}
 
 #[derive(Deserialize)]
 struct RegistryTokenResponse {
@@ -39,12 +56,12 @@ pub fn create_client(config: &Config) -> Result<Client> {
         .context("Failed to build HTTP client")?)
 }
 
-pub async fn fetch_digest_from_tag(
+pub async fn fetch_digests_from_tag(
     image_reference: &ImageReference,
     registry_secret: &RegistrySecret,
     client: &Client,
     enable_jfrog_artifactory_fallback: bool,
-) -> Result<String> {
+) -> Result<Vec<String>> {
     let registry = rewrite_docker_io_registry_target(&image_reference.registry);
     let url = format!(
         "https://{}/v2/{}/manifests/{}",
@@ -57,7 +74,7 @@ pub async fn fetch_digest_from_tag(
 
     match response.status() {
         StatusCode::OK => {
-            let digest = get_digest_from_response(&response)?;
+            let digest = get_digests_from_response(response).await?;
             return Ok(digest);
         }
 
@@ -87,7 +104,7 @@ pub async fn fetch_digest_from_tag(
 
                 debug!("Authentication challenge response: {:?}", response);
 
-                let digest = get_digest_from_response(&response)?;
+                let digest = get_digests_from_response(response).await?;
                 return Ok(digest);
             }
         }
@@ -110,13 +127,13 @@ pub async fn fetch_digest_from_tag(
                         )
                     })?;
 
-                let digest = get_digest_from_response(&response)?;
+                let digest = get_digests_from_response(response).await?;
                 return Ok(digest);
             }
         }
 
         status => {
-            anyhow::bail!(
+            bail!(
                 "Registry {} returned error status {} while fetching OCI image manifest",
                 image_reference.registry,
                 status
@@ -124,7 +141,7 @@ pub async fn fetch_digest_from_tag(
         }
     }
 
-    anyhow::bail!(
+    bail!(
         "Failed to fetch digest from registry's {} metadata endpoint",
         registry
     );
@@ -171,7 +188,29 @@ fn get_artifactory_fallback_url(
     Ok(fallback_url)
 }
 
-fn get_digest_from_response(response: &Response) -> Result<String> {
+async fn get_digests_from_response(response: Response) -> Result<Vec<String>> {
+    let content_type = get_content_type_from_response(&response)?;
+    let digests = match content_type.as_str() {
+        OCI_IMAGE_MANIFEST_CONTENT_TYPE | DOCKER_DISTRIBUTION_MANIFEST_CONTENT_TYPE => {
+            vec![parse_manifest_digest_from_response(&response)?]
+        }
+        OCI_IMAGE_INDEX_CONTENT_TYPE | DOCKER_DISTRIBUTION_INDEX_CONTENT_TYPE => {
+            parse_index_digests_from_response(response).await?
+        }
+        _ => bail!("Unknown content type '{}'", content_type),
+    };
+
+    if digests.is_empty() {
+        bail!(
+            "Parsed digests for content type {} are empty",
+            &content_type
+        );
+    }
+
+    Ok(digests)
+}
+
+fn parse_manifest_digest_from_response(response: &Response) -> Result<String> {
     Ok(response
         .headers()
         .get("Docker-Content-Digest")
@@ -179,6 +218,54 @@ fn get_digest_from_response(response: &Response) -> Result<String> {
         .to_str()
         .context("Received invalid UTF-8 content in Docker-Content-Digest header")?
         .to_owned())
+}
+
+async fn parse_index_digests_from_response(response: Response) -> Result<Vec<String>> {
+    let top_level_digest = parse_manifest_digest_from_response(&response)?;
+    let index_body = response
+        .text()
+        .await
+        .context("Failed to read OCI index response")?;
+
+    collect_index_response_digests(&index_body, &top_level_digest)
+}
+
+pub(crate) fn collect_index_response_digests(
+    body: &str,
+    top_level_digest: &str,
+) -> Result<Vec<String>> {
+    let digests: OciIndexResponse =
+        serde_json::from_str(body).context("Failed to parse OCI index response")?;
+
+    let mut digests: Vec<String> = digests.manifests.iter().map(|m| m.digest.clone()).collect();
+    digests.push(top_level_digest.to_owned());
+    if digests.is_empty() {
+        bail!("Parsed digests are empty");
+    }
+
+    Ok(digests)
+}
+
+fn get_content_type_from_response(response: &Response) -> Result<String> {
+    let raw_content_type = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .context("Response does not contain Content-Type")?
+        .to_str()
+        .context("Content-Type is not a string")?;
+
+    parse_content_type(raw_content_type)
+}
+
+pub(crate) fn parse_content_type(raw_content_type: &str) -> Result<String> {
+    let media_type = raw_content_type
+        .split(';')
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .context("Content-Type header is empty")?;
+
+    Ok(media_type.to_owned())
 }
 
 fn rewrite_docker_io_registry_target(registry: &str) -> &str {
@@ -279,11 +366,171 @@ async fn handle_oauth_authentication_challenge(
         }
 
         status => {
-            anyhow::bail!(
+            bail!(
                 "Failed to retrieve OAuth authentication token from {}, error code {}",
                 realm,
                 status
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn contains_all(actual: &[String], expected: &[&str]) {
+        for expected_digest in expected {
+            assert!(
+                actual.iter().any(|d| d == expected_digest),
+                "expected digest '{}' to be present in {:?}",
+                expected_digest,
+                actual
+            );
+        }
+    }
+
+    #[test]
+    fn parse_content_type_returns_media_type_without_parameters() {
+        let parsed = parse_content_type("application/vnd.oci.image.index.v1+json; charset=utf-8")
+            .expect("content type should parse");
+        assert_eq!(parsed, "application/vnd.oci.image.index.v1+json");
+    }
+
+    #[test]
+    fn parse_content_type_trims_whitespace() {
+        let parsed = parse_content_type(
+            " application/vnd.docker.distribution.manifest.list.v2+json ; charset=UTF-8 ",
+        )
+        .expect("content type should parse");
+        assert_eq!(
+            parsed,
+            "application/vnd.docker.distribution.manifest.list.v2+json"
+        );
+    }
+
+    #[test]
+    fn parse_content_type_rejects_empty_value() {
+        let err = parse_content_type(" ; charset=utf-8").expect_err("expected parse to fail");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("Content-Type header is empty"),
+            "unexpected error: {message}"
+        );
+    }
+
+    #[test]
+    fn parse_oci_index_body_returns_child_and_top_level_digests() {
+        let body = r#"
+        {
+          "schemaVersion": 2,
+          "mediaType": "application/vnd.oci.image.index.v1+json",
+          "manifests": [
+            {
+              "mediaType": "application/vnd.oci.image.manifest.v1+json",
+              "digest": "sha256:amd64digest",
+              "size": 1234,
+              "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+              }
+            },
+            {
+              "mediaType": "application/vnd.oci.image.manifest.v1+json",
+              "digest": "sha256:arm64digest",
+              "size": 1235,
+              "platform": {
+                "architecture": "arm64",
+                "os": "linux"
+              }
+            }
+          ]
+        }
+        "#;
+
+        let result = collect_index_response_digests(body, "sha256:indexdigest")
+            .expect("OCI index body should parse");
+
+        assert_eq!(result.len(), 3);
+        contains_all(
+            &result,
+            &[
+                "sha256:amd64digest",
+                "sha256:arm64digest",
+                "sha256:indexdigest",
+            ],
+        );
+    }
+
+    #[test]
+    fn parse_docker_manifest_list_body_returns_child_and_top_level_digests() {
+        let body = r#"
+        {
+          "schemaVersion": 2,
+          "mediaType": "application/vnd.docker.distribution.manifest.list.v2+json",
+          "manifests": [
+            {
+              "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+              "digest": "sha256:docker-amd64",
+              "size": 2234,
+              "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+              }
+            },
+            {
+              "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+              "digest": "sha256:docker-arm64",
+              "size": 2235,
+              "platform": {
+                "architecture": "arm64",
+                "os": "linux"
+              }
+            }
+          ]
+        }
+        "#;
+
+        let result = collect_index_response_digests(body, "sha256:docker-list")
+            .expect("Docker manifest list body should parse");
+
+        assert_eq!(result.len(), 3);
+        contains_all(
+            &result,
+            &[
+                "sha256:docker-amd64",
+                "sha256:docker-arm64",
+                "sha256:docker-list",
+            ],
+        );
+    }
+
+    #[test]
+    fn parse_manifest_index_body_rejects_invalid_json() {
+        let body = r#"{ "manifests": [ { "digest": 123 } ] }"#;
+
+        let err = collect_index_response_digests(body, "sha256:indexdigest")
+            .expect_err("expected parse to fail");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("Failed to parse OCI index response"),
+            "unexpected error: {message}"
+        );
+    }
+
+    #[test]
+    fn parse_manifest_index_body_allows_top_level_only_when_manifests_is_empty() {
+        let body = r#"
+        {
+          "schemaVersion": 2,
+          "mediaType": "application/vnd.oci.image.index.v1+json",
+          "manifests": []
+        }
+        "#;
+
+        let result = collect_index_response_digests(body, "sha256:indexdigest")
+            .expect("empty manifests should still return top-level digest");
+
+        assert_eq!(result, vec!["sha256:indexdigest".to_string()]);
     }
 }

@@ -1,9 +1,9 @@
 use crate::config::{Config, DockerConfig, RegistrySecret};
 use crate::image_reference::ImageReference;
-use crate::oci_registry::fetch_digest_from_tag;
+use crate::oci_registry::fetch_digests_from_tag;
 use crate::rollout::Rollout;
 use crate::state::{ContainerImageReference, ControllerContext};
-use anyhow::Context;
+use anyhow::{bail, Context};
 use futures::future::try_join_all;
 use globset::Glob;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
@@ -109,21 +109,21 @@ where
                     find_matching_image_pull_secret(&image_pull_secrets, reference)
                         .or_else(|_| get_registry_secret_from_config(&ctx.config, reference))?;
 
-                let recent_digest = fetch_digest_from_tag(
+                let recent_digests = fetch_digests_from_tag(
                     &reference.image_reference,
                     &registry_secret,
                     &ctx.http_client,
                     ctx.config.feature_flags.enable_jfrog_artifactory_fallback,
                 )
                 .await
-                .context("Failed to retrieve recent digest from registry")?;
+                .context("Failed to retrieve recent digests from registry")?;
 
-                info!("Found recent image digest {}", recent_digest);
+                info!("Found recent image digests {}", recent_digests.join(","));
 
-                if reference.digest.ne(&recent_digest) {
+                if !recent_digests.contains(&reference.digest) {
                     info!(
-                        "Triggering rollout for {} resource {} to digest {}",
-                        kind_name, resource_name, recent_digest
+                        "Triggering rollout for {} resource {} to its recent digest",
+                        kind_name, resource_name
                     );
 
                     T::patch_rollout_annotation(
@@ -305,7 +305,7 @@ fn find_matching_image_pull_secret(
             }
         }
     }
-    anyhow::bail!("No matching image pull secret found");
+    bail!("No matching image pull secret found");
 }
 
 async fn collect_image_pull_secrets(

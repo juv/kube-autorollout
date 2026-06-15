@@ -152,7 +152,7 @@ async fn fetch_docker_manifest(
     registry_secret: &RegistrySecret,
     url: &str,
 ) -> Result<Response> {
-    info!("Fetching docker manifest for from URL {}", url);
+    info!("Fetching docker manifest from URL {}", url);
 
     let authorization_header = get_authorization_header(registry_secret);
     debug!("Authorization header: {}", authorization_header);

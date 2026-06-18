@@ -78,7 +78,18 @@ where
 
         if desired_replicas > 0 && actual_replicas > 0 {
             let selector = resource.selector();
-            let pod = get_associated_pod(&pods, &selector).await?;
+            let pod = match get_associated_pod(&pods, &selector).await {
+                Ok(pod) => pod,
+                Err(err) => {
+                    warn!(
+                        error = %err,
+                        kind = %kind_name,
+                        resource = %resource_name,
+                        "Skipping resource because its pods/containers are not scheduled or ready yet"
+                    );
+                    continue;
+                }
+            };
             let pod_name = pod.metadata.name.as_ref().unwrap();
 
             warn_misconfigured_container_image_pull_policies(&pod);

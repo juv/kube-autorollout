@@ -119,8 +119,8 @@ impl Config {
                 )?;
 
                 info!(
-                    "Parsed ImagePullSecret content to Docker Config structure {:?}",
-                    parsed_config
+                    parsed_config = ?parsed_config,
+                    "Parsed ImagePullSecret content to Docker Config structure"
                 );
                 *docker_config = parsed_config;
             }
@@ -145,7 +145,10 @@ impl Config {
 }
 
 pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Config> {
-    info!("Loading config from file {}", path.as_ref().display());
+    info!(
+        path = %path.as_ref().display(),
+        "Loading config from file"
+    );
     let yaml_str = fs::read_to_string(&path)
         .with_context(|| format!("Failed to read config file: {}", path.as_ref().display()))?;
 
@@ -158,8 +161,8 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Config> {
     config.parse_image_pull_secrets()?;
 
     info!(
-        "Parsed valid application config:\n{}",
-        serde_yaml_ng::to_string(&config)?
+        config_yaml = %serde_yaml_ng::to_string(&config)?,
+        "Parsed valid application config"
     );
 
     Ok(config)

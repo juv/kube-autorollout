@@ -64,8 +64,10 @@ where
         });
 
         debug!(
-            "Patching {} {} with patch {:?}",
-            k8s_resource_kind, resource_name, patch
+            kind = %k8s_resource_kind,
+            resource = %resource_name,
+            patch = ?patch,
+            "Patching resource",
         );
         api.patch(
             resource_name,

@@ -22,10 +22,10 @@ pub async fn create_client() -> anyhow::Result<Client> {
     let client = Client::try_default().await?;
     let api_server_info = client.apiserver_version().await?;
     info!(
-        "Connected to namespace {}, in-cluster Kubernetes API server with version {}.{}",
-        client.default_namespace(),
-        api_server_info.major,
-        api_server_info.minor
+        namespace = %client.default_namespace(),
+        major_version = %api_server_info.major,
+        minor_version = %api_server_info.minor,
+        "Connected to in-cluster Kubernetes API server"
     );
     Ok(client)
 }
@@ -60,15 +60,19 @@ where
     let resource_list = api.list(&lp).await?;
 
     info!(
-        "Scanning for digest changes in {} {} resources with label {}",
-        resource_list.items.len(),
-        kind_name,
-        KUBE_AUTOROLLOUT_LABEL
+        resource_count = %resource_list.items.len(),
+        kind = %kind_name,
+        label = %KUBE_AUTOROLLOUT_LABEL,
+        "Scanning for digest changes in resources"
     );
 
     for resource in resource_list.items {
         let resource_name = resource.name_any();
-        info!("Found {} resource with label: {}", kind_name, resource_name);
+        info!(
+            kind = %kind_name,
+            resource = %resource_name,
+            "Found resource with label"
+        );
         let desired_replicas = resource.desired_replicas();
         let actual_replicas = resource.actual_replicas();
 
@@ -89,8 +93,9 @@ where
 
             let image_pull_secrets = resource.image_pull_secrets();
             debug!(
-                "Parsed image pull secrets {:?} for resource {}",
-                image_pull_secrets, resource_name
+                secrets = ?image_pull_secrets,
+                resource = %resource_name,
+                "Parsed image pull secrets for resource"
             );
 
             let image_pull_secrets = collect_image_pull_secrets(&secrets, &image_pull_secrets)
@@ -101,29 +106,49 @@ where
 
             for reference in container_image_references.iter() {
                 info!(
-                    "Found pod {} container {} with image {} and current digest {}",
-                    pod_name, reference.container_name, reference.image_reference, reference.digest
+                    pod = %pod_name,
+                    container = %reference.container_name,
+                    image = %reference.image_reference,
+                    current_digest = %reference.digest,
+                    "Found container with image and current digest"
                 );
 
                 let registry_secret =
                     find_matching_image_pull_secret(&image_pull_secrets, reference)
                         .or_else(|_| get_registry_secret_from_config(&ctx.config, reference))?;
 
-                let recent_digests = fetch_digests_from_tag(
+                let recent_digests = match fetch_digests_from_tag(
                     &reference.image_reference,
                     &registry_secret,
                     &ctx.http_client,
                     ctx.config.feature_flags.enable_jfrog_artifactory_fallback,
                 )
                 .await
-                .context("Failed to retrieve recent digests from registry")?;
+                .context("Failed to retrieve recent digests from registry")
+                {
+                    Ok(digests) => digests,
+                    Err(err) => {
+                        warn!(
+                            error = %err,
+                            pod = %pod_name,
+                            container = %reference.container_name,
+                            image = %reference.image_reference,
+                            "Skipping container because registry lookup failed"
+                        );
+                        continue;
+                    }
+                };
 
-                info!("Found recent image digests {}", recent_digests.join(","));
+                info!(
+                    recent_digests = %recent_digests.join(","),
+                    "Found recent image digests"
+                );
 
                 if !recent_digests.contains(&reference.digest) {
                     info!(
-                        "Triggering rollout for {} resource {} to its recent digest",
-                        kind_name, resource_name
+                        kind = %kind_name,
+                        resource = %resource_name,
+                        "Triggering rollout for resource"
                     );
 
                     T::patch_rollout_annotation(
@@ -139,21 +164,26 @@ where
                         )
                     })?;
                     info!(
-                        "Successfully triggered rollout for {} resource {}",
-                        kind_name, resource_name
+                        kind = %kind_name,
+                        resource = %resource_name,
+                        "Successfully triggered rollout"
                     );
                     continue;
                 } else {
                     info!(
-                        "Skipping {} resource {}, digest is up to date",
-                        kind_name, resource_name
+                        kind = %kind_name,
+                        resource = %resource_name,
+                        "Skipping resource, digest is up to date"
                     );
                 }
             }
         } else {
             info!(
-                "Skipping {} resource {} as desired replicas are {} and actual replicas are {}",
-                kind_name, resource_name, desired_replicas, actual_replicas
+                kind = %kind_name,
+                resource = %resource_name,
+                desired_replicas = %desired_replicas,
+                actual_replicas = %actual_replicas,
+                "Skipping resource as desired and actual replicas are zero"
             );
         }
     }
@@ -193,9 +223,9 @@ async fn get_associated_pod(
             if let Some(invalid_container) = container_statuses.iter().find(|cs| cs.image_id == "")
             {
                 info!(
-                    "Skipping pod {} because container {} contains an empty imageID field",
-                    pod.metadata.name.as_ref().unwrap(),
-                    invalid_container.name
+                    pod = %pod.metadata.name.as_ref().unwrap(),
+                    container = %invalid_container.name,
+                    "Skipping pod because container contains an empty imageID field"
                 );
                 false
             } else {
@@ -255,9 +285,10 @@ fn warn_misconfigured_container_image_pull_policies(pod: &Pod) {
         .filter(|container| container.image_pull_policy.as_deref().unwrap() != "Always")
         .for_each(|container| {
             warn!(
-                "Container {} in pod {} has a misconfigured imagePullPolicy. Should be 'Always', to have an effect with kube-autorollout",
-                container.name, pod.metadata.name.as_ref().unwrap()
-            )
+                container = %container.name,
+                pod = %pod.metadata.name.as_ref().unwrap(),
+                "Container has a misconfigured imagePullPolicy. Should be 'Always', to have an effect with kube-autorollout"
+            );
         });
 }
 
@@ -283,7 +314,7 @@ fn find_matching_image_pull_secret(
         for auth in &image_pull_secret.auths {
             let pull_secret_hostname_pattern = normalize_image_registry_name(auth.0);
 
-            //As opposed to Docker's config json, the Kubernetes .dockerconfigjson can include * wildcards in the keys, so it needs to be glob'ed: https://kubernetes.io/docs/concepts/containers/images/#config-json
+            //As opposed to Docker's config json, the Kubernetes .dockerconfigjson can include * wildcards in the keys, so it needs to be glob'ed: [https://kubernetes.io/docs/concepts/containers/images/#config-json](https://kubernetes.io/docs/concepts/containers/images/#config-json)
             let glob = Glob::new(&pull_secret_hostname_pattern)
                 .with_context(|| {
                     format!("invalid hostname pattern {}", pull_secret_hostname_pattern)
@@ -297,8 +328,8 @@ fn find_matching_image_pull_secret(
                 };
 
                 info!(
-                    "Found matching image pull secret for pod registry {}",
-                    normalized_pod_registry_name
+                    registry = %normalized_pod_registry_name,
+                    "Found matching image pull secret for pod registry"
                 );
 
                 return Ok(registry_secret);
@@ -326,7 +357,10 @@ async fn get_image_pull_secret_content(
     secrets: &Api<Secret>,
     secret_name: &str,
 ) -> anyhow::Result<DockerConfig> {
-    debug!("Getting secret content for secret {}", secret_name);
+    debug!(
+        secret = %secret_name,
+        "Getting secret content"
+    );
 
     let secret = secrets
         .get(secret_name)
@@ -347,7 +381,7 @@ async fn get_image_pull_secret_content(
         })?
         .0;
 
-    let docker_config_str = str::from_utf8(docker_config_bytes)
+    let docker_config_str = std::str::from_utf8(docker_config_bytes)
         .context("Failed to convert .dockerconfigjson bytes to UTF-8 string")?;
 
     let docker_config: DockerConfig =

@@ -46,8 +46,8 @@ pub fn create_client(config: &Config) -> Result<Client> {
         let cert = Certificate::from_pem(&file_content).context("Failed to parse certificate")?;
         client_builder = client_builder.add_root_certificate(cert);
         info!(
-            "Adding ca certificate(s) given in file {} to truststore",
-            file_path.to_str().unwrap()
+            file = %file_path.display(),
+            "Adding ca certificate(s) given in file to truststore"
         );
     }
 
@@ -102,7 +102,10 @@ pub async fn fetch_digests_from_tag(
                     .await
                     .with_context(|| format!("Failed to fetch manifest from {}", url))?;
 
-                debug!("Authentication challenge response: {:?}", response);
+                debug!(
+                    response = ?response,
+                    "Authentication challenge response"
+                );
 
                 let digest = get_digests_from_response(response).await?;
                 return Ok(digest);
@@ -113,9 +116,9 @@ pub async fn fetch_digests_from_tag(
             if enable_jfrog_artifactory_fallback && is_artifactory_response(&response.headers()) {
                 let fallback_url = get_artifactory_fallback_url(image_reference, registry)?;
                 info!(
-                    "Received http status {} previously, fetching digest from Artifactory fallback url {}",
-                    response.status(),
-                    fallback_url
+                    status = %response.status(),
+                    url = %fallback_url,
+                    "Received previous error status, fetching digest from Artifactory fallback url"
                 );
 
                 let response = fetch_docker_manifest(client, registry_secret, &fallback_url)
@@ -152,10 +155,14 @@ async fn fetch_docker_manifest(
     registry_secret: &RegistrySecret,
     url: &str,
 ) -> Result<Response> {
-    info!("Fetching docker manifest from URL {}", url);
+    info!(url = %url, "Fetching docker manifest from URL");
 
     let authorization_header = get_authorization_header(registry_secret);
-    debug!("Authorization header: {}", authorization_header);
+
+    debug!(
+        authorization_header_length = %authorization_header.len(),
+        "Acquired authorization header"
+    );
 
     let response = client
         .get(url)
@@ -165,7 +172,10 @@ async fn fetch_docker_manifest(
         .await
         .context("Failed to send request to fetch manifest")?;
 
-    debug!("Fetch Docker manifest response: {:?}", response);
+    debug!(
+        response = ?response,
+        "Fetch Docker manifest response"
+    );
 
     Ok(response)
 }
@@ -271,7 +281,11 @@ pub(crate) fn parse_content_type(raw_content_type: &str) -> Result<String> {
 fn rewrite_docker_io_registry_target(registry: &str) -> &str {
     if registry.eq("docker.io") {
         //rewrite "docker.io" to "registry-1.docker.io", to mimic containerd
-        debug!("Rewriting docker.io to registry-1.docker.io");
+        debug!(
+            registry = %registry,
+            rewrite_to = "registry-1.docker.io",
+            "Rewriting docker.io to registry-1.docker.io"
+        );
         return "registry-1.docker.io";
     }
     registry
@@ -302,11 +316,12 @@ async fn handle_oauth_authentication_challenge(
     www_authenticate_header: &str,
 ) -> Result<RegistrySecret> {
     debug!(
-        "Trying to parse WWW-Authenticate header response from registry {}: {}",
-        registry, www_authenticate_header
+        registry = %registry,
+        header = %www_authenticate_header,
+        "Trying to parse WWW-Authenticate header response from registry"
     );
 
-    //parse auth challenge information from WWW-Authenticate header: https://datatracker.ietf.org/doc/html/rfc6750#section-3
+    //parse auth challenge information from WWW-Authenticate header: [https://datatracker.ietf.org/doc/html/rfc6750#section-3](https://datatracker.ietf.org/doc/html/rfc6750#section-3)
     //example: WWW-Authenticate: Bearer realm="https://auth.docker.io/token",service="registry.docker.io",scope="repository:samalba/my-app:pull,push"
     let auth_challenge_params: Vec<_> = www_authenticate_header[7..].split(',').collect();
     let mut auth_challenge_map: HashMap<_, _> = auth_challenge_params
@@ -339,8 +354,10 @@ async fn handle_oauth_authentication_challenge(
     })?;
 
     info!(
-        "Requesting authentication token from {} for service {} and scope {}",
-        realm, service, scope
+        realm = %realm,
+        service = %service,
+        scope = %scope,
+        "Requesting authentication token for service and scope"
     );
 
     let token_url = format!("{}?service={}&scope={}", realm, service, scope);

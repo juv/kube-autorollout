@@ -9,6 +9,7 @@ use globset::Glob;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::core::v1::{ContainerStatus, Pod, Secret};
 use kube::api::ListParams;
+use kube::runtime::reflector::Lookup;
 use kube::{Api, Client, ResourceExt};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -78,7 +79,7 @@ where
 
         if desired_replicas > 0 && actual_replicas > 0 {
             let selector = resource.selector();
-            let pod = match get_associated_pod(&pods, &selector).await {
+            let pod = match get_associated_pod(&pods, &selector, &resource).await {
                 Ok(pod) => pod,
                 Err(err) => {
                     warn!(
@@ -202,10 +203,14 @@ where
     Ok(())
 }
 
-async fn get_associated_pod(
+async fn get_associated_pod<T>(
     pods: &Api<Pod>,
     selector: &BTreeMap<String, String>,
-) -> anyhow::Result<Pod> {
+    resource: &T,
+) -> anyhow::Result<Pod>
+where
+    T: Rollout,
+{
     // Build label selector string like "key1=value1,key2=value2"
     let label_selector = selector
         .iter()
@@ -223,18 +228,28 @@ async fn get_associated_pod(
 
     pod_list
         .into_iter()
+        .filter(|pod| pod_belongs_to_resource(pod, resource))
         .filter(|pod| {
-            let container_statuses = pod
+            let pod_name = pod.metadata.name.as_ref().unwrap();
+            let container_statuses = match pod
                 .status
-                .clone()
-                .unwrap()
-                .container_statuses
-                .expect("Pods should have container statuses");
+                .as_ref()
+                .and_then(|status| status.container_statuses.as_ref())
+            {
+                Some(container_statuses) => container_statuses,
+                None => {
+                    info!(
+                        pod = %pod_name,
+                        "Skipping pod because it has no container status yet"
+                    );
+                    return false;
+                }
+            };
 
             if let Some(invalid_container) = container_statuses.iter().find(|cs| cs.image_id == "")
             {
                 info!(
-                    pod = %pod.metadata.name.as_ref().unwrap(),
+                    pod = %pod_name,
                     container = %invalid_container.name,
                     "Skipping pod because container contains an empty imageID field"
                 );
@@ -245,6 +260,70 @@ async fn get_associated_pod(
         })
         .next()
         .with_context(|| format!("No pod found matching selector {}", label_selector))
+}
+
+fn pod_belongs_to_resource<T>(pod: &Pod, parent_resource: &T) -> bool
+where
+    T: Rollout,
+{
+    let pod_name = pod.metadata.name.as_ref().unwrap();
+    let Some(owner_references) = pod.metadata.owner_references.as_ref() else {
+        info!(
+            pod = %pod_name,
+            "Skipping pod because it has no metadata.ownerReferences"
+        );
+        return false;
+    };
+
+    let expected_resource_kind = T::kind_name();
+    let expected_resource_name = parent_resource.name_any();
+
+    let matches_parent = match expected_resource_kind {
+        "StatefulSet" | "DaemonSet" => owner_references.iter().any(|owner| {
+            owner.kind == expected_resource_kind
+                && owner.name == expected_resource_name
+                && owner.controller.unwrap_or(false)
+        }),
+        "Deployment" => {
+            let Some(pod_template_hash) = get_pod_template_hash(pod) else {
+                info!(
+                    pod = %pod_name,
+                    "Skipping pod because it has no metadata.labels[\"pod-template-hash\"]"
+                );
+                return false;
+            };
+            let expected_replica_set_name = format!("{expected_resource_name}-{pod_template_hash}");
+
+            owner_references
+                .iter()
+                .find(|owner| {
+                    owner.kind == "ReplicaSet"
+                        && owner.controller.unwrap_or(false)
+                        && owner.name == expected_replica_set_name
+                })
+                .is_some()
+        }
+        _ => false,
+    };
+
+    if !matches_parent {
+        info!(
+            pod = %pod_name,
+            resource_kind = %expected_resource_kind,
+            resource_name = %expected_resource_name,
+            "Skipping pod because its metadata.ownerReferences do not match the expected resource"
+        );
+    }
+
+    matches_parent
+}
+
+fn get_pod_template_hash(pod: &Pod) -> Option<&str> {
+    pod.metadata
+        .labels
+        .as_ref()
+        .and_then(|labels| labels.get("pod-template-hash"))
+        .map(String::as_str)
 }
 
 fn sort_pods_by_creation_timestamp(a: &Pod, b: &Pod) -> Ordering {

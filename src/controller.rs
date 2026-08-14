@@ -9,7 +9,6 @@ use globset::Glob;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::core::v1::{ContainerStatus, Pod, Secret};
 use kube::api::ListParams;
-use kube::runtime::reflector::Lookup;
 use kube::{Api, Client, ResourceExt};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
